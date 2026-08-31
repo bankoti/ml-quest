@@ -11,6 +11,7 @@ An interactive, zero-to-hero machine learning course. Learn by changing live mod
 - Dedicated practice track and searchable ML field guide
 - Three guided capstones covering regression, fraud detection, and production ML
 - Adaptive ten-question review sessions that prioritize weak and untouched concepts
+- Private browser-based dataset playground with CSV import, real train/test evaluation, baseline comparison, visual results, and downloadable experiment briefs
 - XP, streaks, mastery tracking, project completion, and a printable certificate
 - Browser-saved progress and code drafts
 - Responsive, touch-friendly, and keyboard-accessible

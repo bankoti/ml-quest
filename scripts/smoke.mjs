@@ -1,5 +1,7 @@
-import { readFile, stat } from 'node:fs/promises'
+import { readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
+import { pathToFileURL } from 'node:url'
+import ts from 'typescript'
 
 const html = await readFile('dist/index.html', 'utf8')
 const jsMatch = html.match(/src="([^"]+\.js)"/)
@@ -13,6 +15,7 @@ const challenges = await readFile('src/codeChallenges.ts', 'utf8')
 const reference = await readFile('src/reference.ts', 'utf8')
 const capstones = await readFile('src/capstones.ts', 'utf8')
 const app = await readFile('src/App.tsx', 'utf8')
+const playground = await readFile('src/Playground.tsx', 'utf8')
 const lessonCount = (curriculum.match(/lesson\('/g) || []).length
 const challengeCount = (challenges.match(/title: '/g) || []).length
 const glossaryCount = (reference.match(/term: '/g) || []).length
@@ -20,6 +23,21 @@ const capstoneCount = (capstones.match(/slug: '/g) || []).length
 const decisionCount = (capstones.match(/title: '/g) || []).length - capstoneCount
 if (lessonCount !== 24 || challengeCount !== 24 || glossaryCount !== 40 || capstoneCount !== 3 || decisionCount !== 15) throw new Error(`Course inventory mismatch: ${lessonCount} lessons, ${challengeCount} challenges, ${glossaryCount} terms, ${capstoneCount} capstones, ${decisionCount} decisions`)
 if (!app.includes('buildReviewQueue') || !app.includes("page: 'review'")) throw new Error('Adaptive review route is missing')
+if (!app.includes("page: 'playground'") || !playground.includes('runExperiment') || !playground.includes('parseCsv') || !playground.includes('Download .md brief')) throw new Error('Dataset playground workflow is incomplete')
+
+const playgroundRuntime = 'scripts/.playground-smoke-runtime.mjs'
+const compiledPlayground = ts.transpileModule(playground, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText
+await writeFile(playgroundRuntime, compiledPlayground)
+let playgroundModule
+try { playgroundModule = await import(`${pathToFileURL(playgroundRuntime).href}?${Date.now()}`) } finally { await unlink(playgroundRuntime) }
+const regression = playgroundModule.runExperiment(playgroundModule.BUILT_INS[0].rows, 'area_sqft', 'price_k', 'regression', 75)
+const classificationDataset = playgroundModule.BUILT_INS[1]
+const classification = playgroundModule.runExperiment(classificationDataset.rows, classificationDataset.feature, classificationDataset.target, 'classification', 75)
+const classificationScores = classificationDataset.columns.filter(column => column !== classificationDataset.target).map(column => ({ column, result: playgroundModule.runExperiment(classificationDataset.rows, column, classificationDataset.target, 'classification', 75)?.primary }))
+if (!regression || regression.primary >= regression.baseline) throw new Error('Regression playground model did not beat its baseline')
+if (!classification || classification.primary <= classification.baseline) throw new Error(`Classification playground model did not beat its baseline (${classification?.primary} vs ${classification?.baseline}; ${JSON.stringify(classificationScores)})`)
+const csv = playgroundModule.parseCsv('feature,target\n1,2\n2,4\n3,6\n4,8\n5,10\n6,12\n7,14\n8,16', 'tiny.csv')
+if (csv.rows.length !== 8 || csv.columns.length !== 2) throw new Error('CSV playground import failed')
 
 const starters = [...challenges.matchAll(/starter: `([\s\S]*?)`,\n\s*tests:/g)].map(match => match[1])
 const tests = [...challenges.matchAll(/tests: `([\s\S]*?)`,\n\s*hints:/g)].map(match => match[1])
@@ -29,4 +47,4 @@ for (let index = 0; index < 24; index += 1) {
   if (check.status !== 0) throw new Error(`Python challenge ${index + 1} has invalid syntax: ${check.stderr}`)
 }
 
-console.log(`Course check passed (${lessonCount} lessons, ${challengeCount} Python quests, ${capstoneCount} capstones, ${decisionCount} project decisions, ${glossaryCount} reference terms, ${Math.round(info.size / 1024)} KB app bundle)`)
+console.log(`Course check passed (${lessonCount} lessons, ${challengeCount} Python quests, ${capstoneCount} capstones, ${decisionCount} project decisions, data playground + CSV brief export, ${glossaryCount} reference terms, ${Math.round(info.size / 1024)} KB app bundle)`)

@@ -4,6 +4,7 @@ import { CAPSTONES, getCapstone, type Capstone } from './capstones'
 import { CODE_CHALLENGES } from './codeChallenges'
 import { LESSONS, STAGES, TOTAL_MINUTES, getLesson, getStageForLesson, type Lesson } from './curriculum'
 import { InteractiveLab } from './Lab'
+import { Playground } from './Playground'
 import { FORMULAS, GLOSSARY, MODEL_CHOOSER } from './reference'
 
 const STORAGE_KEY = 'ml-quest-progress-v2'
@@ -21,7 +22,7 @@ type Route =
   | { page: 'home'; anchor?: 'curriculum' | 'how-it-works' }
   | { page: 'lesson'; slug: string; initialStep?: number }
   | { page: 'project'; slug: string }
-  | { page: 'practice' | 'projects' | 'review' | 'reference' | 'certificate' }
+  | { page: 'practice' | 'projects' | 'review' | 'playground' | 'reference' | 'certificate' }
 
 function todayKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -58,6 +59,7 @@ function parseRoute(hash: string): Route {
   if (hash.startsWith('#/practice')) return { page: 'practice' }
   if (hash.startsWith('#/projects')) return { page: 'projects' }
   if (hash.startsWith('#/review')) return { page: 'review' }
+  if (hash.startsWith('#/playground')) return { page: 'playground' }
   if (hash.startsWith('#/reference')) return { page: 'reference' }
   if (hash.startsWith('#/certificate')) return { page: 'certificate' }
   if (hash.startsWith('#/curriculum')) return { page: 'home', anchor: 'curriculum' }
@@ -88,7 +90,7 @@ function TopNav({ progress, dark = false }: { progress: ProgressState; dark?: bo
   const next = LESSONS.find(item => !progress.lessons.includes(item.slug)) || LESSONS.find(item => !progress.code.includes(item.slug)) || LESSONS[0]
   return <nav className={`site-nav ${dark ? 'nav-dark' : ''}`}>
     <Brand dark={dark}/>
-    <div className="nav-links"><a href="#/curriculum">Course</a><a href="#/practice">Practice</a><a href="#/projects">Projects</a><a href="#/review">Review</a><a href="#/reference">Reference</a></div>
+    <div className="nav-links"><a href="#/curriculum">Course</a><a href="#/practice">Practice</a><a href="#/projects">Projects</a><a href="#/playground">Data lab</a><a href="#/review">Review</a><a href="#/reference">Reference</a></div>
     <a className="nav-progress" href={`#/lesson/${next.slug}`} aria-label={`${total} of 48 mastery checks complete`}><span>{total}/48</span><i style={{ width: `${total / 48 * 100}%` }} /></a>
   </nav>
 }
@@ -147,6 +149,7 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
         <div className="hero-track-heading"><p className="section-kicker">Hero track</p><h2>Turn knowledge into judgment.</h2><p>The hard part of applied ML is not calling a model. It is making defensible decisions around it.</p></div>
         <div className="hero-track-grid">
           <a href="#/projects" className="hero-track-card projects-card"><span>Applied capstones · {progress.capstones.length}/3</span><h3>Ship three systems on paper before you ship one for real.</h3><p>Frame the outcome, choose the evaluation, set the decision policy, and plan for failure.</p><b>Open capstone studio →</b></a>
+          <a href="#/playground" className="hero-track-card playground-card"><span>Dataset lab · private by design</span><h3>Fit a real model and make it beat the baseline.</h3><p>Bring a numeric CSV or use a built-in dataset. Split, train, evaluate, visualize, and export the evidence.</p><b>Open data playground →</b></a>
           <a href="#/review" className="hero-track-card review-card"><span>Adaptive recall · {Object.values(progress.review).reduce((sum, item) => sum + item.attempts, 0)} answers</span><h3>Practice the concept your memory needs next.</h3><p>A focused ten-question session prioritizes missed and untouched ideas, then explains every answer.</p><b>Start a review session →</b></a>
         </div>
       </section>
@@ -422,6 +425,7 @@ export function App() {
     if (project) return <ProjectPage project={project} progress={progress} onComplete={completeCapstone}/>
   }
   if (route.page === 'review') return <ReviewPage progress={progress} onAnswer={recordReview}/>
+  if (route.page === 'playground') return <div className="inner-page playground-page"><TopNav progress={progress}/><Playground/><footer className="footer"><Brand dark/><div><b>Your data stays local</b><span>zero uploads, real evidence</span></div><p>From dataset to portfolio brief.</p></footer></div>
   if (route.page === 'reference') return <ReferencePage progress={progress}/>
   if (route.page === 'certificate') return <CertificatePage progress={progress}/>
   return <Home progress={progress} reset={reset}/>
