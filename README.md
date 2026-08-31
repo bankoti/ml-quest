@@ -9,7 +9,9 @@ An interactive, zero-to-hero machine learning course. Learn by changing live mod
 - Topic-specific interactive model labs
 - Concept checkpoints with immediate explanations
 - Dedicated practice track and searchable ML field guide
-- XP, streaks, mastery tracking, and a printable certificate
+- Three guided capstones covering regression, fraud detection, and production ML
+- Adaptive ten-question review sessions that prioritize weak and untouched concepts
+- XP, streaks, mastery tracking, project completion, and a printable certificate
 - Browser-saved progress and code drafts
 - Responsive, touch-friendly, and keyboard-accessible
 

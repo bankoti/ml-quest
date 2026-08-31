@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CodeLab } from './CodeLab'
+import { CAPSTONES, getCapstone, type Capstone } from './capstones'
 import { CODE_CHALLENGES } from './codeChallenges'
 import { LESSONS, STAGES, TOTAL_MINUTES, getLesson, getStageForLesson, type Lesson } from './curriculum'
 import { InteractiveLab } from './Lab'
@@ -12,12 +13,15 @@ interface ProgressState {
   lessons: string[]
   code: string[]
   activeDates: string[]
+  capstones: string[]
+  review: Record<string, { attempts: number; correct: number; lastReviewed: string }>
 }
 
 type Route =
   | { page: 'home'; anchor?: 'curriculum' | 'how-it-works' }
   | { page: 'lesson'; slug: string; initialStep?: number }
-  | { page: 'practice' | 'reference' | 'certificate' }
+  | { page: 'project'; slug: string }
+  | { page: 'practice' | 'projects' | 'review' | 'reference' | 'certificate' }
 
 function todayKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -26,10 +30,10 @@ function todayKey(date = new Date()) {
 function readProgress(): ProgressState {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null')
-    if (saved?.lessons && saved?.code) return { lessons: saved.lessons, code: saved.code, activeDates: saved.activeDates || [] }
+    if (saved?.lessons && saved?.code) return { lessons: saved.lessons, code: saved.code, activeDates: saved.activeDates || [], capstones: saved.capstones || [], review: saved.review || {} }
     const legacy = JSON.parse(localStorage.getItem(LEGACY_KEY) || '[]')
-    return { lessons: Array.isArray(legacy) ? legacy : [], code: [], activeDates: [] }
-  } catch { return { lessons: [], code: [], activeDates: [] } }
+    return { lessons: Array.isArray(legacy) ? legacy : [], code: [], activeDates: [], capstones: [], review: {} }
+  } catch { return { lessons: [], code: [], activeDates: [], capstones: [], review: {} } }
 }
 
 function getStreak(activeDates: string[]) {
@@ -41,10 +45,19 @@ function getStreak(activeDates: string[]) {
   return streak
 }
 
+function getXP(progress: ProgressState) {
+  const reviewXP = Object.values(progress.review).reduce((sum, item) => sum + item.correct * 10, 0)
+  return progress.lessons.length * 100 + progress.code.length * 150 + progress.capstones.length * 500 + reviewXP
+}
+
 function parseRoute(hash: string): Route {
   const lesson = hash.match(/^#\/lesson\/([^/]+)(?:\/(code))?/)
   if (lesson) return { page: 'lesson', slug: decodeURIComponent(lesson[1]), initialStep: lesson[2] ? 4 : 0 }
+  const project = hash.match(/^#\/project\/([^/]+)/)
+  if (project) return { page: 'project', slug: decodeURIComponent(project[1]) }
   if (hash.startsWith('#/practice')) return { page: 'practice' }
+  if (hash.startsWith('#/projects')) return { page: 'projects' }
+  if (hash.startsWith('#/review')) return { page: 'review' }
   if (hash.startsWith('#/reference')) return { page: 'reference' }
   if (hash.startsWith('#/certificate')) return { page: 'certificate' }
   if (hash.startsWith('#/curriculum')) return { page: 'home', anchor: 'curriculum' }
@@ -75,7 +88,7 @@ function TopNav({ progress, dark = false }: { progress: ProgressState; dark?: bo
   const next = LESSONS.find(item => !progress.lessons.includes(item.slug)) || LESSONS.find(item => !progress.code.includes(item.slug)) || LESSONS[0]
   return <nav className={`site-nav ${dark ? 'nav-dark' : ''}`}>
     <Brand dark={dark}/>
-    <div className="nav-links"><a href="#/curriculum">Course</a><a href="#/practice">Practice</a><a href="#/reference">Reference</a></div>
+    <div className="nav-links"><a href="#/curriculum">Course</a><a href="#/practice">Practice</a><a href="#/projects">Projects</a><a href="#/review">Review</a><a href="#/reference">Reference</a></div>
     <a className="nav-progress" href={`#/lesson/${next.slug}`} aria-label={`${total} of 48 mastery checks complete`}><span>{total}/48</span><i style={{ width: `${total / 48 * 100}%` }} /></a>
   </nav>
 }
@@ -91,6 +104,7 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
   const next = LESSONS.find(item => !completeSet.has(item.slug)) || LESSONS.find(item => !codeSet.has(item.slug)) || LESSONS[0]
   const mastery = progress.lessons.length + progress.code.length
   const streak = getStreak(progress.activeDates)
+  const hasProgress = mastery > 0 || progress.capstones.length > 0 || Object.keys(progress.review).length > 0
   return <div className="site-shell">
     <TopNav progress={progress}/>
     <main>
@@ -103,7 +117,7 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
             <a className="button primary" href={`#/lesson/${next.slug}`}>{mastery ? 'Continue your quest' : 'Start learning'} <span>→</span></a>
             <a className="text-action" href="#/curriculum">Explore the full course ↓</a>
           </div>
-          <div className="hero-stats"><span><b>24</b> visual lessons</span><span><b>24</b> Python quests</span><span><b>0</b> setup</span></div>
+          <div className="hero-stats"><span><b>24</b> visual lessons</span><span><b>24</b> Python quests</span><span><b>3</b> capstones</span></div>
         </div>
         <div className="hero-lab-wrap">
           <div className="hero-note note-one">move the line</div><div className="hero-note note-two">then code the rule ↗</div>
@@ -129,10 +143,18 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
         <a href="#/certificate"><span>Finish line</span><h2>Mastery certificate</h2><p>Complete both the concept and coding tracks to create your credential.</p><b>{mastery}/48 checks →</b></a>
       </section>
 
+      <section className="hero-track">
+        <div className="hero-track-heading"><p className="section-kicker">Hero track</p><h2>Turn knowledge into judgment.</h2><p>The hard part of applied ML is not calling a model. It is making defensible decisions around it.</p></div>
+        <div className="hero-track-grid">
+          <a href="#/projects" className="hero-track-card projects-card"><span>Applied capstones · {progress.capstones.length}/3</span><h3>Ship three systems on paper before you ship one for real.</h3><p>Frame the outcome, choose the evaluation, set the decision policy, and plan for failure.</p><b>Open capstone studio →</b></a>
+          <a href="#/review" className="hero-track-card review-card"><span>Adaptive recall · {Object.values(progress.review).reduce((sum, item) => sum + item.attempts, 0)} answers</span><h3>Practice the concept your memory needs next.</h3><p>A focused ten-question session prioritizes missed and untouched ideas, then explains every answer.</p><b>Start a review session →</b></a>
+        </div>
+      </section>
+
       <section id="curriculum" className="curriculum">
         <div className="curriculum-intro">
           <div><p className="section-kicker">Your path</p><h2>From first pattern to production.</h2></div>
-          <div className="progress-card"><ProgressRing value={mastery}/><div><b>{mastery} of 48 checks</b><span>{progress.lessons.length * 100 + progress.code.length * 150} XP · {streak} day streak</span>{mastery > 0 && <button onClick={reset}>Reset progress</button>}</div></div>
+          <div className="progress-card"><ProgressRing value={mastery}/><div><b>{mastery} of 48 checks</b><span>{getXP(progress)} XP · {streak} day streak</span>{hasProgress && <button onClick={reset}>Reset progress</button>}</div></div>
         </div>
         {STAGES.map((stage, stageIndex) => {
           const offset = STAGES.slice(0, stageIndex).reduce((sum, item) => sum + item.lessons.length, 0)
@@ -244,6 +266,82 @@ function PracticePage({ progress }: { progress: ProgressState }) {
   </div>
 }
 
+function ProjectsPage({ progress }: { progress: ProgressState }) {
+  return <div className="inner-page"><PageHeader progress={progress} eyebrow="Hero track · applied judgment" title="Build the plan before the pipeline." lede="Three guided capstones put you in the decisions that make or break a real ML system. Each one ends with a complete, defensible project brief."/>
+    <section className="projects-shell">
+      <div className="projects-progress"><div><strong>{progress.capstones.length}/3</strong><span>capstones complete</span></div><div><strong>{progress.capstones.length * 500}</strong><span>project XP</span></div><p>Choose any project. There is no code to hide behind—only the product, data, evaluation, and operational decisions that make a model useful.</p></div>
+      <div className="project-grid">{CAPSTONES.map(project => { const complete = progress.capstones.includes(project.slug); return <a key={project.slug} href={`#/project/${project.slug}`} className="project-card" style={{ '--project': project.accent } as React.CSSProperties}><div><span>{project.number}</span><b>{complete ? '✓ Complete' : project.eyebrow}</b></div><h2>{project.title}</h2><p>{project.brief}</p><small>Deliverable</small><strong>{project.deliverable}</strong><footer><span>5 decisions · 500 XP</span><b>{complete ? 'Review plan' : 'Start project'} →</b></footer></a> })}</div>
+    </section>
+    <footer className="footer"><Brand dark/><div><b>3 applied capstones</b><span>from model to system</span></div><p>Good ML begins with good decisions.</p></footer>
+  </div>
+}
+
+function ProjectPage({ project, progress, onComplete }: { project: Capstone; progress: ProgressState; onComplete: (slug: string) => void }) {
+  const [step, setStep] = useState(0)
+  const [answer, setAnswer] = useState<number | null>(null)
+  const [checked, setChecked] = useState(false)
+  const decision = project.decisions[step]
+  const correct = checked && answer === decision.correct
+  const alreadyComplete = progress.capstones.includes(project.slug)
+  const next = () => { setStep(current => current + 1); setAnswer(null); setChecked(false) }
+  const finish = () => { onComplete(project.slug); window.location.hash = '#/projects' }
+  return <div className="project-page" style={{ '--project': project.accent } as React.CSSProperties}>
+    <TopNav progress={progress} dark/>
+    <main className="project-workspace">
+      <aside className="project-brief"><a href="#/projects">← Capstone studio</a><p>{project.eyebrow}</p><h1>{project.title}</h1><div><span>Client brief</span><p>{project.brief}</p></div><div><span>Your deliverable</span><p>{project.deliverable}</p></div><ol>{project.decisions.map((item, index) => <li key={item.title} className={index === step ? 'current' : index < step || alreadyComplete ? 'done' : ''}><i>{index < step || alreadyComplete ? '✓' : index + 1}</i><span>{item.title}<small>{item.skill}</small></span></li>)}</ol></aside>
+      <section className="decision-panel">
+        <div className="decision-progress"><span>Decision {step + 1} of {project.decisions.length}</span><i><b style={{ width: `${(step + Number(correct)) / project.decisions.length * 100}%` }}/></i><em>{decision.skill}</em></div>
+        <div className="decision-copy"><p className="lesson-kicker">{decision.title}</p><h2>{decision.context}</h2><p>{decision.question}</p></div>
+        <div className="decision-options" role="radiogroup" aria-label="Project decisions">{decision.options.map((option, index) => { const selected = answer === index; const state = checked ? index === decision.correct ? 'correct' : selected ? 'wrong' : '' : selected ? 'selected' : ''; return <button key={option} className={state} role="radio" aria-checked={selected} onClick={() => { setAnswer(index); setChecked(false) }}><span>{String.fromCharCode(65 + index)}</span><b>{option}</b>{checked && index === decision.correct && <i>✓</i>}</button> })}</div>
+        {checked && <div className={`decision-feedback ${correct ? 'correct' : 'wrong'}`}><b>{correct ? 'Sound decision.' : 'Reconsider the tradeoff.'}</b><p>{decision.explanation}</p></div>}
+        <div className="decision-actions"><a className="button ghost" href="#/projects">Save & exit</a>{!checked || !correct ? <button className="button primary" disabled={answer === null} onClick={() => setChecked(true)}>Check decision <span>→</span></button> : step < project.decisions.length - 1 ? <button className="button primary" onClick={next}>Next decision <span>→</span></button> : <button className="button primary" onClick={finish}>{alreadyComplete ? 'Return to projects' : 'Complete · +500 XP'} <span>→</span></button>}</div>
+      </section>
+    </main>
+  </div>
+}
+
+function buildReviewQueue(progress: ProgressState) {
+  return [...LESSONS].sort((a, b) => {
+    const aRecord = progress.review[a.slug]
+    const bRecord = progress.review[b.slug]
+    const score = (slug: string, record?: { attempts: number; correct: number; lastReviewed: string }) => {
+      if (!record) return progress.lessons.includes(slug) ? -200 : -100
+      const accuracy = record.correct / Math.max(record.attempts, 1)
+      const age = Math.min(30, (Date.now() - new Date(record.lastReviewed).getTime()) / 86_400_000)
+      return accuracy * 100 - age - Math.min(record.attempts, 5)
+    }
+    return score(a.slug, aRecord) - score(b.slug, bRecord)
+  }).slice(0, 10).map(item => item.slug)
+}
+
+function ReviewPage({ progress, onAnswer }: { progress: ProgressState; onAnswer: (slug: string, correct: boolean) => void }) {
+  const [queue, setQueue] = useState(() => buildReviewQueue(progress))
+  const [index, setIndex] = useState(0)
+  const [answer, setAnswer] = useState<number | null>(null)
+  const [checked, setChecked] = useState(false)
+  const [sessionCorrect, setSessionCorrect] = useState(0)
+  const finished = index >= queue.length
+  const lesson = finished ? undefined : getLesson(queue[index])
+  const restart = () => { setQueue(buildReviewQueue(progress)); setIndex(0); setAnswer(null); setChecked(false); setSessionCorrect(0) }
+  const check = () => {
+    if (!lesson || answer === null) return
+    const isCorrect = answer === lesson.quiz.correct
+    onAnswer(lesson.slug, isCorrect)
+    if (isCorrect) setSessionCorrect(value => value + 1)
+    setChecked(true)
+  }
+  const advance = () => { setIndex(value => value + 1); setAnswer(null); setChecked(false) }
+  const reviewed = Object.values(progress.review)
+  const overall = reviewed.reduce((sum, item) => sum + item.attempts, 0)
+  const accuracy = overall ? Math.round(reviewed.reduce((sum, item) => sum + item.correct, 0) / overall * 100) : 0
+  if (finished) return <div className="inner-page"><PageHeader progress={progress} eyebrow="Adaptive review · session complete" title={`${sessionCorrect} of ${queue.length} recalled.`} lede="Every answer has updated your review priority. Missed concepts will return sooner; strong concepts will make room for the next weak spot."/><section className="review-finish"><ProgressRing value={sessionCorrect} total={queue.length}/><h2>{sessionCorrect >= 8 ? 'Your recall is getting durable.' : 'Useful misses. Now you know where to focus.'}</h2><p>Review is practice, not a verdict. A hard question answered today becomes an easy decision later.</p><div><button className="button primary" onClick={restart}>Start another session →</button><a className="button ghost" href="#/curriculum">Return to course</a></div></section></div>
+  return <div className="inner-page review-page"><PageHeader progress={progress} eyebrow="Adaptive review · 10 questions" title="Recall beats rereading." lede="The queue prioritizes concepts you missed, have not reviewed, or have not completed. Answer from memory; the explanation does the rest."/>
+    <section className="review-shell"><aside className="review-sidebar"><span>Session</span><strong>{index + 1}/10</strong><i><b style={{ height: `${index / queue.length * 100}%` }}/></i><dl><div><dt>Lifetime answers</dt><dd>{overall}</dd></div><div><dt>Recall accuracy</dt><dd>{overall ? `${accuracy}%` : 'New'}</dd></div><div><dt>Concepts seen</dt><dd>{reviewed.length}/24</dd></div></dl><p>Priority is based on completion, past accuracy, and time since review.</p></aside>
+      {lesson && <article className="review-card"><div className="review-card-top"><span>{getStageForLesson(lesson.slug)?.shortTitle}</span><a href={`#/lesson/${lesson.slug}`}>Open lesson ↗</a></div><p className="lesson-kicker">Concept recall</p><h2>{lesson.quiz.question}</h2><div className="answers">{lesson.quiz.options.map((option, optionIndex) => { const selected = answer === optionIndex; const state = checked ? optionIndex === lesson.quiz.correct ? 'correct' : selected ? 'wrong' : '' : selected ? 'selected' : ''; return <button key={option} className={state} onClick={() => { if (!checked) setAnswer(optionIndex) }}><span>{String.fromCharCode(65 + optionIndex)}</span><b>{option}</b>{checked && optionIndex === lesson.quiz.correct && <i>✓</i>}</button> })}</div>{checked && <div className={`quiz-feedback ${answer === lesson.quiz.correct ? 'correct' : 'wrong'}`}><b>{answer === lesson.quiz.correct ? 'Recalled.' : 'This one will come back sooner.'}</b><p>{lesson.quiz.explanation}</p></div>}<div className="review-actions">{!checked ? <button className="button primary" disabled={answer === null} onClick={check}>Check answer <span>→</span></button> : <button className="button primary" onClick={advance}>{index === queue.length - 1 ? 'See session result' : 'Next question'} <span>→</span></button>}</div></article>}
+    </section>
+  </div>
+}
+
 function ReferencePage({ progress }: { progress: ProgressState }) {
   const [query, setQuery] = useState('')
   const filtered = GLOSSARY.filter(item => `${item.term} ${item.category} ${item.definition} ${item.use}`.toLowerCase().includes(query.toLowerCase()))
@@ -274,7 +372,7 @@ function CertificatePage({ progress }: { progress: ProgressState }) {
     <section className="certificate-shell">
       {!unlocked ? <div className="certificate-locked"><ProgressRing value={mastery}/><h2>{mastery}/48 checks complete</h2><p>Finish {24 - progress.lessons.length} concept checkpoints and {24 - progress.code.length} Python quests.</p><div><a className="button primary" href="#/curriculum">Continue course →</a><a className="button ghost" href="#/practice">Open practice track</a></div></div> : <>
         <label className="name-field">Name on certificate<input value={name} onChange={event => setName(event.target.value)} placeholder="Your name"/></label>
-        <article className="certificate" aria-label="ML Quest certificate of mastery"><div className="cert-top"><Brand/><span>Credential · {credentialCode(name || 'learner')}</span></div><p>Certificate of mastery</p><h2>{name.trim() || 'Your name'}</h2><p>completed the full</p><h3>Machine Learning<br/>Zero-to-Hero Quest</h3><div className="cert-metrics"><span><b>24</b> concepts</span><span><b>24</b> Python quests</span><span><b>{progress.lessons.length * 100 + progress.code.length * 150}</b> XP</span></div><footer><span>{new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</span><b>bankoti.github.io/ml-quest</b></footer></article>
+        <article className="certificate" aria-label="ML Quest certificate of mastery"><div className="cert-top"><Brand/><span>Credential · {credentialCode(name || 'learner')}</span></div><p>Certificate of mastery</p><h2>{name.trim() || 'Your name'}</h2><p>completed the full</p><h3>Machine Learning<br/>Zero-to-Hero Quest</h3><div className="cert-metrics"><span><b>24</b> concepts</span><span><b>24</b> Python quests</span><span><b>{getXP(progress)}</b> XP</span></div><footer><span>{new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</span><b>{progress.capstones.length ? `${progress.capstones.length} capstone${progress.capstones.length === 1 ? '' : 's'} · ` : ''}bankoti.github.io/ml-quest</b></footer></article>
         <button className="button primary print-button" disabled={!name.trim()} onClick={() => window.print()}>Print / save certificate <span>→</span></button>
       </>}
     </section>
@@ -291,11 +389,23 @@ export function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
     return next
   })
+  const completeCapstone = (slug: string) => setProgress(current => {
+    if (current.capstones.includes(slug)) return current
+    const next = { ...current, capstones: [...current.capstones, slug], activeDates: Array.from(new Set([...current.activeDates, todayKey()])) }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+    return next
+  })
+  const recordReview = (slug: string, correct: boolean) => setProgress(current => {
+    const previous = current.review[slug] || { attempts: 0, correct: 0, lastReviewed: '' }
+    const next = { ...current, review: { ...current.review, [slug]: { attempts: previous.attempts + 1, correct: previous.correct + Number(correct), lastReviewed: new Date().toISOString() } }, activeDates: Array.from(new Set([...current.activeDates, todayKey()])) }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+    return next
+  })
   const reset = () => {
-    if (!window.confirm('Reset all concept and coding progress? Saved code drafts will remain.')) return
+    if (!window.confirm('Reset all course, project, and review progress? Saved code drafts will remain.')) return
     localStorage.removeItem(STORAGE_KEY)
     localStorage.removeItem(LEGACY_KEY)
-    setProgress({ lessons: [], code: [], activeDates: [] })
+    setProgress({ lessons: [], code: [], activeDates: [], capstones: [], review: {} })
   }
 
   if (route.page === 'lesson') {
@@ -303,6 +413,12 @@ export function App() {
     if (lesson) return <LessonPage lesson={lesson} progress={progress} initialStep={route.initialStep} onLessonComplete={slug => update('lessons', slug)} onCodePass={slug => update('code', slug)}/>
   }
   if (route.page === 'practice') return <PracticePage progress={progress}/>
+  if (route.page === 'projects') return <ProjectsPage progress={progress}/>
+  if (route.page === 'project') {
+    const project = getCapstone(route.slug)
+    if (project) return <ProjectPage project={project} progress={progress} onComplete={completeCapstone}/>
+  }
+  if (route.page === 'review') return <ReviewPage progress={progress} onAnswer={recordReview}/>
   if (route.page === 'reference') return <ReferencePage progress={progress}/>
   if (route.page === 'certificate') return <CertificatePage progress={progress}/>
   return <Home progress={progress} reset={reset}/>
