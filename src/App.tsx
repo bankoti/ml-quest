@@ -382,7 +382,8 @@ function CertificatePage({ progress }: { progress: ProgressState }) {
 
 export function App() {
   const route = useRoute()
-  const [progress, setProgress] = useState<ProgressState>(readProgress)
+  const [storedProgress, setProgress] = useState<ProgressState>(readProgress)
+  const progress: ProgressState = { ...storedProgress, capstones: storedProgress.capstones || [], review: storedProgress.review || {} }
   const update = (field: 'lessons' | 'code', slug: string) => setProgress(current => {
     if (current[field].includes(slug)) return current
     const next = { ...current, [field]: [...current[field], slug], activeDates: Array.from(new Set([...current.activeDates, todayKey()])) }
@@ -390,14 +391,16 @@ export function App() {
     return next
   })
   const completeCapstone = (slug: string) => setProgress(current => {
-    if (current.capstones.includes(slug)) return current
-    const next = { ...current, capstones: [...current.capstones, slug], activeDates: Array.from(new Set([...current.activeDates, todayKey()])) }
+    const completed = current.capstones || []
+    if (completed.includes(slug)) return current
+    const next = { ...current, capstones: [...completed, slug], activeDates: Array.from(new Set([...current.activeDates, todayKey()])) }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
     return next
   })
   const recordReview = (slug: string, correct: boolean) => setProgress(current => {
-    const previous = current.review[slug] || { attempts: 0, correct: 0, lastReviewed: '' }
-    const next = { ...current, review: { ...current.review, [slug]: { attempts: previous.attempts + 1, correct: previous.correct + Number(correct), lastReviewed: new Date().toISOString() } }, activeDates: Array.from(new Set([...current.activeDates, todayKey()])) }
+    const review = current.review || {}
+    const previous = review[slug] || { attempts: 0, correct: 0, lastReviewed: '' }
+    const next = { ...current, review: { ...review, [slug]: { attempts: previous.attempts + 1, correct: previous.correct + Number(correct), lastReviewed: new Date().toISOString() } }, activeDates: Array.from(new Set([...current.activeDates, todayKey()])) }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
     return next
   })
