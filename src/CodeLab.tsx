@@ -6,24 +6,27 @@ type RunState = 'idle' | 'loading' | 'running' | 'passed' | 'failed'
 
 function draftKey(slug: string) { return `ml-quest-code-v1:${slug}` }
 
-function loadDraft(slug: string, starter: string) {
-  try { return localStorage.getItem(draftKey(slug)) || starter } catch { return starter }
+function loadDraft(slug: string, starter: string, functionName: string) {
+  try {
+    const draft = localStorage.getItem(draftKey(slug))
+    return draft?.includes(`def ${functionName}`) ? draft : starter
+  } catch { return starter }
 }
 
 export function CodeLab({ slug, challenge, passed, onPass }: { slug: string; challenge: CodeChallenge; passed: boolean; onPass: () => void }) {
-  const [code, setCode] = useState(() => loadDraft(slug, challenge.starter))
+  const [code, setCode] = useState(() => loadDraft(slug, challenge.starter, challenge.functionName))
   const [runState, setRunState] = useState<RunState>(passed ? 'passed' : 'idle')
   const [result, setResult] = useState<RunResult | null>(null)
   const [attempts, setAttempts] = useState(0)
   const [revealedHints, setRevealedHints] = useState(0)
 
   useEffect(() => {
-    setCode(loadDraft(slug, challenge.starter))
+    setCode(loadDraft(slug, challenge.starter, challenge.functionName))
     setRunState(passed ? 'passed' : 'idle')
     setResult(null)
     setAttempts(0)
     setRevealedHints(0)
-  }, [slug, challenge.starter, passed])
+  }, [slug, challenge.starter, challenge.functionName, passed])
 
   useEffect(() => {
     const timer = setTimeout(() => {

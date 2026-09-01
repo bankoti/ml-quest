@@ -69,6 +69,67 @@ function Regression({ value }: { value: number }) {
   </>
 }
 
+function Logistic({ value }: { value: number }) {
+  const threshold = .15 + value * .007
+  const boundaryScore = Math.log(threshold / (1 - threshold))
+  const boundaryX = clamp((boundaryScore + 4) / 8 * 100, 0, 100)
+  const curve = Array.from({ length: 41 }, (_, index) => {
+    const score = -4 + index / 5
+    const probability = 1 / (1 + Math.exp(-score))
+    return `${index ? 'L' : 'M'} ${index / 40 * 100} ${94 - probability * 84}`
+  }).join(' ')
+  const examples = [-3.3, -2.5, -1.7, -.8, -.2, .45, 1.1, 1.9, 2.8, 3.4]
+  const positive = examples.filter(score => 1 / (1 + Math.exp(-score)) >= threshold).length
+  return <div className="logistic-lab">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Logistic sigmoid probability curve"><line className="logistic-grid" x1="0" y1={94 - threshold * 84} x2="100" y2={94 - threshold * 84}/><path d={curve}/><line className="logistic-boundary" x1={boundaryX} y1="8" x2={boundaryX} y2="96"/>{examples.map((score, index) => { const probability = 1 / (1 + Math.exp(-score)); return <circle key={score} className={probability >= threshold ? 'positive' : ''} cx={(score + 4) / 8 * 100} cy={index % 2 ? 91 : 86} r="2.1"/> })}</svg>
+    <div className="logistic-label threshold-label" style={{ top: `${94 - threshold * 84}%` }}>threshold {threshold.toFixed(2)}</div><div className="logistic-label probability-label">probability ↑</div>
+    <div className="lab-readout"><span>Positive predictions <strong>{positive}/{examples.length}</strong></span><span>Boundary score <strong>{boundaryScore.toFixed(2)}</strong></span></div>
+  </div>
+}
+
+const neighborPoints = [
+  [13, 28, 0], [19, 67, 0], [28, 42, 0], [34, 76, 0], [39, 23, 1], [45, 58, 0],
+  [58, 34, 1], [63, 72, 1], [69, 49, 1], [76, 22, 1], [82, 63, 1], [90, 39, 1],
+]
+
+function Neighbors({ value }: { value: number }) {
+  const k = [1, 3, 5, 7][Math.min(3, Math.round(value / 34))]
+  const query = [51, 49]
+  const ranked = neighborPoints.map((point, index) => ({ index, distance: Math.hypot(point[0] - query[0], point[1] - query[1]), label: point[2] })).sort((a, b) => a.distance - b.distance)
+  const nearest = new Set(ranked.slice(0, k).map(item => item.index))
+  const votes = ranked.slice(0, k).reduce((sum, item) => sum + item.label, 0)
+  const prediction = votes > k / 2 ? 1 : 0
+  const radius = ranked[k - 1].distance
+  return <div className="knn-lab"><div className="knn-plot"><div className="grid-lines"/><div className="knn-ring" style={{ width: `${radius * 2}%`, aspectRatio: '1', left: `${query[0]}%`, top: `${query[1]}%` }}/>{neighborPoints.map((point, index) => <i key={index} className={`neighbor class-${point[2]} ${nearest.has(index) ? 'nearest' : ''}`} style={{ left: `${point[0]}%`, top: `${point[1]}%` }}><span>{nearest.has(index) ? ranked.findIndex(item => item.index === index) + 1 : ''}</span></i>)}<b className={`query class-${prediction}`} style={{ left: `${query[0]}%`, top: `${query[1]}%` }}>?</b></div><div className="lab-readout"><span>k neighbors <strong>{k}</strong></span><span>Vote <strong>{k - votes} blue · {votes} green</strong></span><span>Prediction <strong>class {prediction}</strong></span></div></div>
+}
+
+function SupportVector({ value }: { value: number }) {
+  const softness = value / 100
+  const margin = 8 + softness * 13
+  const support = new Set([2, 4, 6, 8])
+  return <div className="svm-lab"><div className="svm-plot" style={{ '--margin': `${margin}px` } as React.CSSProperties}><div className="grid-lines"/><div className="svm-plane main"/><div className="svm-plane upper"/><div className="svm-plane lower"/>{neighborPoints.map((point, index) => <i key={index} className={`svm-point class-${point[2]} ${support.has(index) ? 'support' : ''}`} style={{ left: `${point[0]}%`, top: `${point[1]}%` }}>{support.has(index) && <span>SV</span>}</i>)}</div><div className="lab-readout"><span>Support vectors <strong>{support.size}</strong></span><span>Margin <strong>{margin.toFixed(0)} px</strong></span><span>C behavior <strong>{softness < .5 ? 'strict' : 'soft'}</strong></span></div></div>
+}
+
+function DecisionTree({ value }: { value: number }) {
+  const depth = Math.max(1, Math.min(4, 1 + Math.round(value / 34)))
+  const nodes = Array.from({ length: depth + 1 }, (_, level) => Array.from({ length: 2 ** level }, (_, index) => ({ level, index, x: (index + .5) / 2 ** level * 100, y: 9 + level * (70 / depth) }))).flat()
+  const lines = nodes.filter(node => node.level > 0).map(node => { const parent = nodes.find(item => item.level === node.level - 1 && item.index === Math.floor(node.index / 2))!; return { ...node, parentX: parent.x, parentY: parent.y } })
+  return <div className="tree-lab"><svg viewBox="0 0 100 86" preserveAspectRatio="none" aria-label={`Decision tree with depth ${depth}`}>{lines.map((line, index) => <line key={index} x1={line.parentX} y1={line.parentY} x2={line.x} y2={line.y}/>)}{nodes.map(node => <g key={`${node.level}-${node.index}`} className={node.level === depth ? `leaf leaf-${node.index % 2}` : 'split'}><circle cx={node.x} cy={node.y} r={node.level === depth ? 3.6 : 4.5}/>{node.level < depth && <text x={node.x} y={node.y + 1.3}>{['x₁?', 'x₂?', 'x₃?', 'x₄?'][node.level]}</text>}</g>)}</svg><div className="tree-regions">{Array.from({ length: 2 ** depth }, (_, index) => <i key={index} className={`region-${index % 2}`}/>)}</div><div className="lab-readout"><span>Depth <strong>{depth}</strong></span><span>Leaves <strong>{2 ** depth}</strong></span><span>Capacity <strong>{depth < 3 ? 'simple' : 'flexible'}</strong></span></div></div>
+}
+
+function Forest({ value }: { value: number }) {
+  const count = Math.max(1, Math.min(7, 1 + Math.round(value / 16)))
+  const votes = Array.from({ length: count }, (_, index) => Number((index * 7 + count) % 5 > 1))
+  const positive = votes.reduce((sum, vote) => sum + vote, 0)
+  const final = positive > count / 2 ? 1 : 0
+  return <div className="forest-lab"><div className="forest-trees">{votes.map((vote, index) => <div className="mini-tree" key={index} style={{ animationDelay: `${index * 45}ms` }}><svg viewBox="0 0 50 58"><line x1="25" y1="8" x2="12" y2="29"/><line x1="25" y1="8" x2="38" y2="29"/><line x1="12" y1="29" x2="7" y2="49"/><line x1="12" y1="29" x2="19" y2="49"/><line x1="38" y1="29" x2="32" y2="49"/><line x1="38" y1="29" x2="44" y2="49"/><circle cx="25" cy="8" r="4"/><circle cx="12" cy="29" r="3"/><circle cx="38" cy="29" r="3"/></svg><b className={`vote-${vote}`}>{vote}</b><span>tree {index + 1}</span></div>)}</div><div className="forest-vote"><span>forest vote</span><strong className={`vote-${final}`}>class {final}</strong><i>{positive} of {count} vote green</i></div><div className="lab-readout"><span>Trees <strong>{count}</strong></span><span>Agreement <strong>{Math.round(Math.max(positive, count - positive) / count * 100)}%</strong></span></div></div>
+}
+
+function Boosting({ value }: { value: number }) {
+  const rounds = Math.max(1, Math.min(5, 1 + Math.round(value / 25)))
+  return <div className="boosting-lab"><div className="boosting-rounds">{Array.from({ length: 5 }, (_, index) => { const active = index < rounds; const residual = Math.max(8, 82 - index * 17); return <div key={index} className={active ? 'active' : ''}><span>round {index + 1}</span><div className="stump"><i/><i/><i/></div><b style={{ width: `${active ? residual : 0}%` }}/><small>{active ? `${residual}% residual` : 'waiting'}</small></div> })}</div><div className="boosting-focus"><span>hard examples</span>{[0,1,2,3,4,5].map(index => <i key={index} className={index < Math.max(1, 6 - rounds) ? 'hard' : ''} style={{ scale: `${1 + Number(index < Math.max(1, 6 - rounds)) * .35}` }}/>)}</div><div className="lab-readout"><span>Weak learners <strong>{rounds}</strong></span><span>Residual left <strong>{Math.max(8, 82 - (rounds - 1) * 17)}%</strong></span></div></div>
+}
+
 function Gradient({ value, steps }: { value: number; steps: number }) {
   const rate = value / 100
   const distance = clamp(88 - steps * (5 + rate * 13), 10, 88)
@@ -127,6 +188,8 @@ export function InteractiveLab({ lab, compact = false }: { lab: LabType; compact
   const labels = useMemo(() => {
     const map: Partial<Record<LabType, [string, string, string]>> = {
       regression: ['line slope', 'flat', 'steep'], classifier: ['decision threshold', 'more positives', 'fewer positives'],
+      knn: ['neighbor count (k)', 'local', 'smooth'], svm: ['margin softness', 'strict', 'tolerant'],
+      forest: ['trees in forest', 'one tree', 'many trees'], boosting: ['boosting rounds', 'first correction', 'full ensemble'],
       confusion: ['decision threshold', 'more recall', 'more precision'], tradeoff: ['decision threshold', 'high recall', 'high precision'],
       split: ['training share', 'small train set', 'small test set'], tree: ['tree depth', 'simple', 'complex'],
       ensemble: ['number of voters', 'one model', 'many models'], loss: ['outlier size', 'typical', 'extreme'],
@@ -143,14 +206,20 @@ export function InteractiveLab({ lab, compact = false }: { lab: LabType; compact
   }, [lab])
 
   let visual: React.ReactNode
-  if (['pattern', 'classifier', 'data'].includes(lab)) visual = <Scatter value={value} mode={lab} />
+  if (['pattern', 'data'].includes(lab)) visual = <Scatter value={value} mode={lab} />
   else if (lab === 'regression' || lab === 'loss') visual = <Regression value={value} />
+  else if (lab === 'classifier') visual = <Logistic value={value} />
+  else if (lab === 'knn') visual = <Neighbors value={value} />
+  else if (lab === 'svm') visual = <SupportVector value={value} />
+  else if (lab === 'tree') visual = <DecisionTree value={value} />
+  else if (lab === 'forest') visual = <Forest value={value} />
+  else if (lab === 'boosting') visual = <Boosting value={value} />
   else if (['split', 'baseline', 'ensemble', 'regularize', 'crossval', 'monitor'].includes(lab)) visual = <Bars value={value} lab={lab} />
   else if (['confusion', 'tradeoff', 'leakage'].includes(lab)) visual = <Matrix value={value} />
   else if (lab === 'gradient') visual = <Gradient value={value} steps={steps} />
   else if (lab === 'cluster') visual = <Clusters value={value} />
   else if (lab === 'projection' || lab === 'anomaly') visual = <Clusters value={value} projection />
-  else if (lab === 'network' || lab === 'tree') visual = <Network value={value} />
+  else if (lab === 'network') visual = <Network value={value} />
   else if (lab === 'attention') visual = <Attention value={value} />
   else visual = <FeatureToggles value={value} lab={lab} />
 

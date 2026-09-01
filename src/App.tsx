@@ -9,6 +9,8 @@ import { FORMULAS, GLOSSARY, MODEL_CHOOSER } from './reference'
 
 const STORAGE_KEY = 'ml-quest-progress-v2'
 const LEGACY_KEY = 'ml-quest-progress-v1'
+const COURSE_SIZE = LESSONS.length
+const TOTAL_CHECKS = COURSE_SIZE * 2
 
 interface ProgressState {
   lessons: string[]
@@ -91,11 +93,11 @@ function TopNav({ progress, dark = false }: { progress: ProgressState; dark?: bo
   return <nav className={`site-nav ${dark ? 'nav-dark' : ''}`}>
     <Brand dark={dark}/>
     <div className="nav-links"><a href="#/curriculum">Course</a><a href="#/practice">Practice</a><a href="#/projects">Projects</a><a href="#/playground">Data lab</a><a href="#/review">Review</a><a href="#/reference">Reference</a></div>
-    <a className="nav-progress" href={`#/lesson/${next.slug}`} aria-label={`${total} of 48 mastery checks complete`}><span>{total}/48</span><i style={{ width: `${total / 48 * 100}%` }} /></a>
+    <a className="nav-progress" href={`#/lesson/${next.slug}`} aria-label={`${total} of ${TOTAL_CHECKS} mastery checks complete`}><span>{total}/{TOTAL_CHECKS}</span><i style={{ width: `${total / TOTAL_CHECKS * 100}%` }} /></a>
   </nav>
 }
 
-function ProgressRing({ value, total = 48 }: { value: number; total?: number }) {
+function ProgressRing({ value, total = TOTAL_CHECKS }: { value: number; total?: number }) {
   const percent = Math.round(value / total * 100)
   return <div className="progress-ring" style={{ '--progress': `${percent * 3.6}deg` } as React.CSSProperties}><span>{percent}%</span></div>
 }
@@ -119,7 +121,7 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
             <a className="button primary" href={`#/lesson/${next.slug}`}>{mastery ? 'Continue your quest' : 'Start learning'} <span>→</span></a>
             <a className="text-action" href="#/curriculum">Explore the full course ↓</a>
           </div>
-          <div className="hero-stats"><span><b>24</b> visual lessons</span><span><b>24</b> Python quests</span><span><b>3</b> capstones</span></div>
+          <div className="hero-stats"><span><b>{COURSE_SIZE}</b> visual lessons</span><span><b>{COURSE_SIZE}</b> Python quests</span><span><b>3</b> capstones</span></div>
         </div>
         <div className="hero-lab-wrap">
           <div className="hero-note note-one">move the line</div><div className="hero-note note-two">then code the rule ↗</div>
@@ -140,9 +142,9 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
       </section>
 
       <section className="course-tools">
-        <a href="#/practice"><span>Practice track</span><h2>24 graded Python quests</h2><p>Code every important ML idea from a threshold rule to drift monitoring.</p><b>{progress.code.length}/24 solved →</b></a>
-        <a href="#/reference"><span>Field guide</span><h2>40 terms + 8 formulas</h2><p>Search the language of machine learning and choose a sensible first model.</p><b>Open reference →</b></a>
-        <a href="#/certificate"><span>Finish line</span><h2>Mastery certificate</h2><p>Complete both the concept and coding tracks to create your credential.</p><b>{mastery}/48 checks →</b></a>
+        <a href="#/practice"><span>Practice track</span><h2>{COURSE_SIZE} graded Python quests</h2><p>Code every important ML idea from neighbor voting to drift monitoring.</p><b>{progress.code.length}/{COURSE_SIZE} solved →</b></a>
+        <a href="#/reference"><span>Field guide</span><h2>{GLOSSARY.length} terms + {FORMULAS.length} formulas</h2><p>Search the language of machine learning and choose a sensible first model.</p><b>Open reference →</b></a>
+        <a href="#/certificate"><span>Finish line</span><h2>Mastery certificate</h2><p>Complete both the concept and coding tracks to create your credential.</p><b>{mastery}/{TOTAL_CHECKS} checks →</b></a>
       </section>
 
       <section className="hero-track">
@@ -157,7 +159,7 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
       <section id="curriculum" className="curriculum">
         <div className="curriculum-intro">
           <div><p className="section-kicker">Your path</p><h2>From first pattern to production.</h2></div>
-          <div className="progress-card"><ProgressRing value={mastery}/><div><b>{mastery} of 48 checks</b><span>{getXP(progress)} XP · {streak} day streak</span>{hasProgress && <button onClick={reset}>Reset progress</button>}</div></div>
+          <div className="progress-card"><ProgressRing value={mastery}/><div><b>{mastery} of {TOTAL_CHECKS} checks</b><span>{getXP(progress)} XP · {streak} day streak</span>{hasProgress && <button onClick={reset}>Reset progress</button>}</div></div>
         </div>
         {STAGES.map((stage, stageIndex) => {
           const offset = STAGES.slice(0, stageIndex).reduce((sum, item) => sum + item.lessons.length, 0)
@@ -182,7 +184,7 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
         })}
       </section>
     </main>
-    <footer className="footer"><Brand dark/><div><b>{Math.round((TOTAL_MINUTES + 24 * 8) / 60)} hours</b><span>to practical ML mastery</span></div><p>Built to make machine learning click.</p></footer>
+    <footer className="footer"><Brand dark/><div><b>{Math.round((TOTAL_MINUTES + COURSE_SIZE * 8) / 60)} hours</b><span>to practical ML mastery</span></div><p>Built to make machine learning click.</p></footer>
   </div>
 }
 
@@ -256,8 +258,8 @@ function PageHeader({ progress, eyebrow, title, lede }: { progress: ProgressStat
 function PracticePage({ progress }: { progress: ProgressState }) {
   const [filter, setFilter] = useState<'all' | 'todo' | 'done'>('all')
   const codeSet = useMemo(() => new Set(progress.code), [progress.code])
-  return <div className="inner-page"><PageHeader progress={progress} eyebrow="Practice track · real Python" title="Make the model from scratch." lede="Twenty-four focused exercises turn every visual intuition into working code. Python runs entirely in your browser; your drafts save automatically."/>
-    <section className="practice-summary"><div><strong>{progress.code.length * 150}</strong><span>coding XP</span></div><div><strong>{progress.code.length}/24</strong><span>quests solved</span></div><div><strong>{getStreak(progress.activeDates)}</strong><span>day streak</span></div><ProgressRing value={progress.code.length} total={24}/></section>
+  return <div className="inner-page"><PageHeader progress={progress} eyebrow="Practice track · real Python" title="Make the model from scratch." lede={`${COURSE_SIZE} focused exercises turn every visual intuition into working code. Python runs entirely in your browser; your drafts save automatically.`}/>
+    <section className="practice-summary"><div><strong>{progress.code.length * 150}</strong><span>coding XP</span></div><div><strong>{progress.code.length}/{COURSE_SIZE}</strong><span>quests solved</span></div><div><strong>{getStreak(progress.activeDates)}</strong><span>day streak</span></div><ProgressRing value={progress.code.length} total={COURSE_SIZE}/></section>
     <section className="practice-list"><div className="filter-bar"><span>Challenge library</span><div>{(['all','todo','done'] as const).map(value => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value}</button>)}</div></div>
       {STAGES.map(stage => {
         const visible = stage.lessons.filter(item => filter === 'all' || (filter === 'done') === codeSet.has(item.slug))
@@ -339,7 +341,7 @@ function ReviewPage({ progress, onAnswer }: { progress: ProgressState; onAnswer:
   const accuracy = overall ? Math.round(reviewed.reduce((sum, item) => sum + item.correct, 0) / overall * 100) : 0
   if (finished) return <div className="inner-page"><PageHeader progress={progress} eyebrow="Adaptive review · session complete" title={`${sessionCorrect} of ${queue.length} recalled.`} lede="Every answer has updated your review priority. Missed concepts will return sooner; strong concepts will make room for the next weak spot."/><section className="review-finish"><ProgressRing value={sessionCorrect} total={queue.length}/><h2>{sessionCorrect >= 8 ? 'Your recall is getting durable.' : 'Useful misses. Now you know where to focus.'}</h2><p>Review is practice, not a verdict. A hard question answered today becomes an easy decision later.</p><div><button className="button primary" onClick={restart}>Start another session →</button><a className="button ghost" href="#/curriculum">Return to course</a></div></section></div>
   return <div className="inner-page review-page"><PageHeader progress={progress} eyebrow="Adaptive review · 10 questions" title="Recall beats rereading." lede="The queue prioritizes concepts you missed, have not reviewed, or have not completed. Answer from memory; the explanation does the rest."/>
-    <section className="review-shell"><aside className="review-sidebar"><span>Session</span><strong>{index + 1}/10</strong><i><b style={{ height: `${index / queue.length * 100}%` }}/></i><dl><div><dt>Lifetime answers</dt><dd>{overall}</dd></div><div><dt>Recall accuracy</dt><dd>{overall ? `${accuracy}%` : 'New'}</dd></div><div><dt>Concepts seen</dt><dd>{reviewed.length}/24</dd></div></dl><p>Priority is based on completion, past accuracy, and time since review.</p></aside>
+    <section className="review-shell"><aside className="review-sidebar"><span>Session</span><strong>{index + 1}/10</strong><i><b style={{ height: `${index / queue.length * 100}%` }}/></i><dl><div><dt>Lifetime answers</dt><dd>{overall}</dd></div><div><dt>Recall accuracy</dt><dd>{overall ? `${accuracy}%` : 'New'}</dd></div><div><dt>Concepts seen</dt><dd>{reviewed.length}/{COURSE_SIZE}</dd></div></dl><p>Priority is based on completion, past accuracy, and time since review.</p></aside>
       {lesson && <article className="review-card"><div className="review-card-top"><span>{getStageForLesson(lesson.slug)?.shortTitle}</span><a href={`#/lesson/${lesson.slug}`}>Open lesson ↗</a></div><p className="lesson-kicker">Concept recall</p><h2>{lesson.quiz.question}</h2><div className="answers">{lesson.quiz.options.map((option, optionIndex) => { const selected = answer === optionIndex; const state = checked ? optionIndex === lesson.quiz.correct ? 'correct' : selected ? 'wrong' : '' : selected ? 'selected' : ''; return <button key={option} className={state} onClick={() => { if (!checked) setAnswer(optionIndex) }}><span>{String.fromCharCode(65 + optionIndex)}</span><b>{option}</b>{checked && optionIndex === lesson.quiz.correct && <i>✓</i>}</button> })}</div>{checked && <div className={`quiz-feedback ${answer === lesson.quiz.correct ? 'correct' : 'wrong'}`}><b>{answer === lesson.quiz.correct ? 'Recalled.' : 'This one will come back sooner.'}</b><p>{lesson.quiz.explanation}</p></div>}<div className="review-actions">{!checked ? <button className="button primary" disabled={answer === null} onClick={check}>Check answer <span>→</span></button> : <button className="button primary" onClick={advance}>{index === queue.length - 1 ? 'See session result' : 'Next question'} <span>→</span></button>}</div></article>}
     </section>
   </div>
@@ -350,10 +352,10 @@ function ReferencePage({ progress }: { progress: ProgressState }) {
   const filtered = GLOSSARY.filter(item => `${item.term} ${item.category} ${item.definition} ${item.use}`.toLowerCase().includes(query.toLowerCase()))
   return <div className="inner-page"><PageHeader progress={progress} eyebrow="ML field guide" title="The language, without the fog." lede="Search the essential vocabulary, keep the core equations nearby, and choose a sensible first model for the job."/>
     <section className="reference-shell">
-      <div className="reference-search"><label htmlFor="glossary-search">Search 40 essential terms</label><div><span>⌕</span><input id="glossary-search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Try “overfitting”, “precision”, or “gradient”…"/><b>{filtered.length}</b></div></div>
+      <div className="reference-search"><label htmlFor="glossary-search">Search {GLOSSARY.length} essential terms</label><div><span>⌕</span><input id="glossary-search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Try “SVM”, “random forest”, or “gradient”…"/><b>{filtered.length}</b></div></div>
       <div className="glossary-grid">{filtered.map(item => <article key={item.term}><span>{item.category}</span><h2>{item.term}</h2><p>{item.definition}</p><small>{item.use}</small></article>)}</div>
       {!filtered.length && <div className="empty-state"><b>No matching term yet.</b><p>Try a broader word or clear the search.</p><button onClick={() => setQuery('')}>Clear search</button></div>}
-      <section className="formula-section"><p className="section-kicker">Equation shelf</p><h2>Eight formulas worth recognizing.</h2><div>{FORMULAS.map(item => <article key={item.name}><span>{item.name}</span><strong>{item.formula}</strong><p>{item.note}</p></article>)}</div></section>
+      <section className="formula-section"><p className="section-kicker">Equation shelf</p><h2>{FORMULAS.length} formulas worth recognizing.</h2><div>{FORMULAS.map(item => <article key={item.name}><span>{item.name}</span><strong>{item.formula}</strong><p>{item.note}</p></article>)}</div></section>
       <section className="chooser-section"><p className="section-kicker">Model chooser</p><h2>Start simple. Earn complexity.</h2><div className="chooser-table"><div className="chooser-head"><span>Goal</span><span>Baseline</span><span>Strong tabular choice</span><span>When scale earns it</span></div>{MODEL_CHOOSER.map(row => <div key={row[0]}>{row.map(cell => <span key={cell}>{cell}</span>)}</div>)}</div></section>
     </section>
     <footer className="footer"><Brand dark/><div><b>Keep it open</b><span>while you build</span></div><p>Plain language, practical defaults.</p></footer>
@@ -361,7 +363,7 @@ function ReferencePage({ progress }: { progress: ProgressState }) {
 }
 
 function credentialCode(name: string) {
-  const source = `${name.trim().toLowerCase()}|ml-quest|48|${todayKey()}`
+  const source = `${name.trim().toLowerCase()}|ml-quest|${TOTAL_CHECKS}|${todayKey()}`
   let hash = 2166136261
   for (let index = 0; index < source.length; index += 1) { hash ^= source.charCodeAt(index); hash = Math.imul(hash, 16777619) }
   return Math.abs(hash >>> 0).toString(36).toUpperCase().padStart(7, '0')
@@ -370,16 +372,16 @@ function credentialCode(name: string) {
 function CertificatePage({ progress }: { progress: ProgressState }) {
   const [name, setName] = useState('')
   const mastery = progress.lessons.length + progress.code.length
-  const unlocked = mastery === 48
-  return <div className="inner-page certificate-page"><PageHeader progress={progress} eyebrow="The finish line" title={unlocked ? 'You mastered the full quest.' : 'Your certificate is taking shape.'} lede={unlocked ? 'Add your name to create a printable record of completing both the concept and coding tracks.' : `Complete all 48 mastery checks to unlock the ML Quest certificate. You have ${48 - mastery} left.`}/>
+  const unlocked = mastery >= TOTAL_CHECKS
+  return <div className="inner-page certificate-page"><PageHeader progress={progress} eyebrow="The finish line" title={unlocked ? 'You mastered the full quest.' : 'Your certificate is taking shape.'} lede={unlocked ? 'Add your name to create a printable record of completing both the concept and coding tracks.' : `Complete all ${TOTAL_CHECKS} mastery checks to unlock the ML Quest certificate. You have ${TOTAL_CHECKS - mastery} left.`}/>
     <section className="certificate-shell">
-      {!unlocked ? <div className="certificate-locked"><ProgressRing value={mastery}/><h2>{mastery}/48 checks complete</h2><p>Finish {24 - progress.lessons.length} concept checkpoints and {24 - progress.code.length} Python quests.</p><div><a className="button primary" href="#/curriculum">Continue course →</a><a className="button ghost" href="#/practice">Open practice track</a></div></div> : <>
+      {!unlocked ? <div className="certificate-locked"><ProgressRing value={mastery}/><h2>{mastery}/{TOTAL_CHECKS} checks complete</h2><p>Finish {COURSE_SIZE - progress.lessons.length} concept checkpoints and {COURSE_SIZE - progress.code.length} Python quests.</p><div><a className="button primary" href="#/curriculum">Continue course →</a><a className="button ghost" href="#/practice">Open practice track</a></div></div> : <>
         <label className="name-field">Name on certificate<input value={name} onChange={event => setName(event.target.value)} placeholder="Your name"/></label>
-        <article className="certificate" aria-label="ML Quest certificate of mastery"><div className="cert-top"><Brand/><span>Credential · {credentialCode(name || 'learner')}</span></div><p>Certificate of mastery</p><h2>{name.trim() || 'Your name'}</h2><p>completed the full</p><h3>Machine Learning<br/>Zero-to-Hero Quest</h3><div className="cert-metrics"><span><b>24</b> concepts</span><span><b>24</b> Python quests</span><span><b>{getXP(progress)}</b> XP</span></div><footer><span>{new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</span><b>{progress.capstones.length ? `${progress.capstones.length} capstone${progress.capstones.length === 1 ? '' : 's'} · ` : ''}bankoti.github.io/ml-quest</b></footer></article>
+        <article className="certificate" aria-label="ML Quest certificate of mastery"><div className="cert-top"><Brand/><span>Credential · {credentialCode(name || 'learner')}</span></div><p>Certificate of mastery</p><h2>{name.trim() || 'Your name'}</h2><p>completed the full</p><h3>Machine Learning<br/>Zero-to-Hero Quest</h3><div className="cert-metrics"><span><b>{COURSE_SIZE}</b> concepts</span><span><b>{COURSE_SIZE}</b> Python quests</span><span><b>{getXP(progress)}</b> XP</span></div><footer><span>{new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</span><b>{progress.capstones.length ? `${progress.capstones.length} capstone${progress.capstones.length === 1 ? '' : 's'} · ` : ''}bankoti.github.io/ml-quest</b></footer></article>
         <button className="button primary print-button" disabled={!name.trim()} onClick={() => window.print()}>Print / save certificate <span>→</span></button>
       </>}
     </section>
-    <footer className="footer no-print"><Brand dark/><div><b>48 mastery checks</b><span>one complete journey</span></div><p>Your progress stays on this device.</p></footer>
+    <footer className="footer no-print"><Brand dark/><div><b>{TOTAL_CHECKS} mastery checks</b><span>one complete journey</span></div><p>Your progress stays on this device.</p></footer>
   </div>
 }
 

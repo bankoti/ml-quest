@@ -75,16 +75,43 @@ assert line_predict([], 4, 2) == [], "No inputs means no predictions"`,
     hints: ['Transform every x independently.', 'The intercept is added after multiplying.', 'Return [slope * x + intercept for x in xs].'],
   },
   'logistic-classification': {
-    title: 'Turn probabilities into actions',
-    task: 'Convert probabilities into 0/1 predictions using an inclusive threshold.',
-    functionName: 'classify',
-    starter: `def classify(probabilities, threshold=0.5):
-    """Apply a decision threshold to probabilities."""
+    title: 'Compute the logistic sigmoid',
+    task: 'Convert each numeric score into a probability with 1 / (1 + exp(-score)).',
+    functionName: 'sigmoid',
+    starter: `def sigmoid(scores):
+    """Map model scores to probabilities between zero and one."""
+    import math
     return []`,
-    tests: `assert classify([0.1, 0.5, 0.9]) == [0, 1, 1], "The default threshold is inclusive"
-assert classify([0.2, 0.6, 0.8], 0.7) == [0, 0, 1], "Use the supplied threshold"
-assert classify([], 0.3) == [], "Handle empty input"`,
-    hints: ['This is the same shape as a decision boundary.', 'Compare each probability with threshold.', 'Use 1 if probability >= threshold else 0.'],
+    tests: `assert abs(sigmoid([0])[0] - 0.5) < 1e-9, "A zero score maps to 0.5"
+values = sigmoid([-2, 2])
+assert values[0] < 0.5 < values[1], "Negative and positive scores land on opposite sides"
+assert abs(values[0] + values[1] - 1) < 1e-9, "The sigmoid is symmetric"
+assert sigmoid([]) == [], "Handle empty input"`,
+    hints: ['Use math.exp(-score).', 'Transform every score independently.', 'Return [1 / (1 + math.exp(-score)) for score in scores].'],
+  },
+  'knn-classification': {
+    title: 'Let the nearest labels vote',
+    task: 'Predict a binary label for one query using the k closest one-dimensional training examples.',
+    functionName: 'knn_predict',
+    starter: `def knn_predict(train_x, train_y, query, k=3):
+    """Return the majority label among the k nearest values."""
+    return 0`,
+    tests: `assert knn_predict([1, 2, 8, 9], [0, 0, 1, 1], 2.5, 3) == 0, "Nearby low values vote zero"
+assert knn_predict([1, 2, 8, 9], [0, 0, 1, 1], 7.5, 3) == 1, "Nearby high values vote one"
+assert knn_predict([0, 10], [0, 1], 9, 1) == 1, "k=1 uses the single closest example"`,
+    hints: ['Pair each label with abs(x - query).', 'Sort pairs by distance and take the first k.', 'For binary labels, predict 1 when their sum is more than half of k.'],
+  },
+  'support-vector-machines': {
+    title: 'Classify with a separating hyperplane',
+    task: 'Compute weight × x + bias and return 1 on or above the boundary, otherwise -1.',
+    functionName: 'svm_predict',
+    starter: `def svm_predict(values, weight, bias):
+    """Classify values by the sign of a linear decision score."""
+    return []`,
+    tests: `assert svm_predict([-2, 0, 3], 1, 0) == [-1, 1, 1], "The boundary includes score zero on the positive side"
+assert svm_predict([1, 2, 3], -2, 5) == [1, 1, -1], "Weight and bias position the boundary"
+assert svm_predict([], 4, -1) == [], "Handle empty input"`,
+    hints: ['Calculate score = weight * x + bias.', 'The sign of the score selects the side of the margin.', 'Return 1 if score >= 0 else -1 for every value.'],
   },
   'decision-trees': {
     title: 'Implement one tree split',
@@ -100,8 +127,8 @@ assert tree_predict([], 0, 2, 0, 1) == [], "Handle empty rows"`,
     hints: ['Read row[feature_index] for each example.', 'A tree routes values below the threshold left.', 'Build one output label for every row.'],
   },
   'ensemble-power': {
-    title: 'Combine model votes',
-    task: 'Predictions is a list of model prediction lists. Return the majority vote for each example.',
+    title: 'Vote across a random forest',
+    task: 'Tree predictions are a list of model prediction lists. Return the forest majority vote for each example.',
     functionName: 'ensemble_vote',
     starter: `def ensemble_vote(predictions):
     """Combine rows of model predictions into one result."""
@@ -111,6 +138,18 @@ assert ensemble_vote(models) == [1, 1, 1], "Vote down each example column"
 assert ensemble_vote([[0, 1], [0, 1], [1, 0]]) == [0, 1], "The majority wins"
 assert ensemble_vote([]) == [], "No models means no ensemble prediction"`,
     hints: ['Handle the empty case before reading the first model.', 'zip(*predictions) groups votes by example.', 'For binary votes, 1 wins when sum(votes) > len(votes)/2.'],
+  },
+  'gradient-boosting': {
+    title: 'Calculate the next residuals',
+    task: 'Return actual minus predicted for each example—the errors the next weak learner must correct.',
+    functionName: 'residuals',
+    starter: `def residuals(actual, predicted):
+    """Measure the correction still needed for every prediction."""
+    return []`,
+    tests: `assert residuals([10, 7, 4], [8, 7, 5]) == [2, 0, -1], "Residuals keep their direction"
+assert residuals([0.5, 1.5], [0.2, 1.0]) == [0.3, 0.5], "Support fractional corrections"
+assert residuals([], []) == [], "Handle empty inputs"`,
+    hints: ['Pair actual and predicted values with zip.', 'A positive residual means the ensemble predicted too low.', 'Return [truth - guess for truth, guess in zip(actual, predicted)].'],
   },
   'loss-functions': {
     title: 'Measure squared error',

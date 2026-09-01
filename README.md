@@ -4,8 +4,9 @@ An interactive, zero-to-hero machine learning course. Learn by changing live mod
 
 ## Course
 
-- 24 visual lessons across six stages
-- 24 graded Python quests running fully in the browser
+- 27 visual lessons across six stages
+- 27 graded Python quests running fully in the browser
+- Dedicated interactive animations for linear regression, logistic regression, KNN, SVM, decision trees, random forests, boosting, and neural networks
 - Topic-specific interactive model labs
 - Concept checkpoints with immediate explanations
 - Dedicated practice track and searchable ML field guide
