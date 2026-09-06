@@ -17,6 +17,7 @@ const capstones = await readFile('src/capstones.ts', 'utf8')
 const app = await readFile('src/App.tsx', 'utf8')
 const playground = await readFile('src/Playground.tsx', 'utf8')
 const labs = await readFile('src/Lab.tsx', 'utf8')
+const codeLab = await readFile('src/CodeLab.tsx', 'utf8')
 const lessonCount = (curriculum.match(/lesson\('/g) || []).length
 const challengeCount = (challenges.match(/title: '/g) || []).length
 const glossaryCount = (reference.match(/term: '/g) || []).length
@@ -30,6 +31,8 @@ const missingChallenges = lessonSlugs.filter(slug => !challengeSlugs.includes(sl
 const orphanChallenges = challengeSlugs.filter(slug => !lessonSlugs.includes(slug))
 if (missingChallenges.length || orphanChallenges.length) throw new Error(`Lesson/challenge mismatch: missing ${missingChallenges.join(', ') || 'none'}, orphaned ${orphanChallenges.join(', ') || 'none'}`)
 for (const component of ['Logistic', 'Neighbors', 'SupportVector', 'DecisionTree', 'Forest', 'Boosting']) if (!labs.includes(`function ${component}`)) throw new Error(`${component} animation is missing`)
+if (!labs.includes('Set ${label} to minimum') || !labs.includes('Set ${label} to maximum')) throw new Error('Algorithm lab endpoint controls are missing')
+if (!codeLab.includes('}, [slug, challenge.starter, challenge.functionName])')) throw new Error('Python success results may be cleared when mastery updates')
 if (!app.includes('buildReviewQueue') || !app.includes("page: 'review'")) throw new Error('Adaptive review route is missing')
 if (!app.includes("page: 'playground'") || !playground.includes('runExperiment') || !playground.includes('parseCsv') || !playground.includes('Download .md brief')) throw new Error('Dataset playground workflow is incomplete')
 
@@ -46,6 +49,9 @@ if (!regression || regression.primary >= regression.baseline) throw new Error('R
 if (!classification || classification.primary <= classification.baseline) throw new Error(`Classification playground model did not beat its baseline (${classification?.primary} vs ${classification?.baseline}; ${JSON.stringify(classificationScores)})`)
 const csv = playgroundModule.parseCsv('feature,target\n1,2\n2,4\n3,6\n4,8\n5,10\n6,12\n7,14\n8,16', 'tiny.csv')
 if (csv.rows.length !== 8 || csv.columns.length !== 2) throw new Error('CSV playground import failed')
+
+const socialImage = await stat('dist/og.png')
+if (socialImage.size < 100_000 || !html.includes('og:image:width" content="1716"') || !html.includes('27 visual lessons. 27 Python quests. 8 animated supervised algorithms. Zero setup.')) throw new Error('Social preview metadata or image is incomplete')
 
 const starters = [...challenges.matchAll(/starter: `([\s\S]*?)`,\n\s*tests:/g)].map(match => match[1])
 const tests = [...challenges.matchAll(/tests: `([\s\S]*?)`,\n\s*hints:/g)].map(match => match[1])

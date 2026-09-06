@@ -12,7 +12,7 @@ function Slider({ value, onChange, left, right, label }: { value: number; onChan
   return <div className="lab-control">
     <div><span>{label}</span><strong>{value}</strong></div>
     <input aria-label={label} type="range" min="0" max="100" value={value} onChange={event => onChange(Number(event.target.value))} />
-    <small><span>{left}</span><span>{right}</span></small>
+    <small><button type="button" aria-label={`Set ${label} to minimum`} onClick={() => onChange(0)}>{left}</button><button type="button" aria-label={`Set ${label} to maximum`} onClick={() => onChange(100)}>{right}</button></small>
   </div>
 }
 
