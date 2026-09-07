@@ -24,8 +24,8 @@ npm install
 npm run dev
 ```
 
-Run `npm test` for a production build and static smoke check.
+Run `npm test` for a production build plus smoke checks covering course inventory, interactive labs, Python quests, the playground, and social preview metadata.
 
 ## Publishing
 
-Pushes to `main` deploy automatically to GitHub Pages at <https://bankoti.github.io/ml-quest/>.
+Pull requests to `main` run the same verification. Pushes to `main` deploy automatically to GitHub Pages at <https://bankoti.github.io/ml-quest/>.
