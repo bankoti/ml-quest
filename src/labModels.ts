@@ -57,15 +57,6 @@ export function svmModel(value: number) {
   return { c, weight, margin: 1 / weight, support: signedMargins.map(m => m <= 1 + 1e-8), violations: signedMargins.filter(m => m < 1 - 1e-8).length }
 }
 
-// Predictions of seven already-trained example trees for one fixed query.
-export const forestVotes = [0, 1, 1, 0, 1, 1, 1]
-export function forestModel(value: number) {
-  const count = Math.max(1, Math.min(7, 1 + Math.round(value / 16)))
-  const votes = forestVotes.slice(0, count)
-  const positive = votes.reduce((sum, vote) => sum + vote, 0)
-  return { count, votes, positive, prediction: Number(positive > count / 2), tie: positive * 2 === count }
-}
-
 export const boostingData = [2, 2.6, 3.1, 3.5, 6.5, 7.2, 7.8, 8.2].map((y, x) => ({ x, y }))
 export function boostingModel(rounds: number) {
   const actual = boostingData.map(point => point.y)

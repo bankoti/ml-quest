@@ -65,12 +65,13 @@ async function runComponentSmoke() {
         name: 'ml-quest-pyodide-smoke-stub',
         enforce: 'pre',
         resolveId(source, importer) {
-          if (source === './engine/pyodide' && importer?.endsWith('/src/CodeLab.tsx')) return pyodideStubId
+          if (source === './engine/pyodide' && (importer?.endsWith('/src/CodeLab.tsx') || importer?.endsWith('/src/ProjectStudio.tsx'))) return pyodideStubId
           return null
         },
         load(id) {
           if (id !== pyodideStubId) return null
-          return `export async function runChallenge() {
+          return `export async function runChallenge(code, tests, project) {
+            if (project) return globalThis.__mlqProjectRunner(code, tests)
             return { ok: true, output: 'stubbed python output', durationMs: 12 }
           }`
         },
@@ -134,8 +135,21 @@ async function runComponentSmoke() {
       for (const alternative of [m.weight - .01, m.weight + .01, 0, 3]) assert.ok(objective(m.weight) <= objective(alternative) + 1e-8)
       m.support.forEach((support, i) => assert.equal(support, models.svmData[i].label * m.weight * models.svmData[i].x <= 1 + 1e-8))
     }
+    const advanced = await server.ssrLoadModule('/src/computedModels.ts')
+    const { LESSONS } = await server.ssrLoadModule('/src/curriculum.ts')
+    for (const lesson of LESSONS) {
+      await withMountedDom(React.createElement(InteractiveLab, { lab: lesson.lab }), async container => {
+        assert.match(container.querySelector('.lab-topline').textContent, /computed experiment/)
+        const slider = getByRole(container, 'slider'), label = slider.getAttribute('aria-label')
+        for (const endpoint of ['minimum', 'maximum']) {
+          await act(async () => fireEvent.click(getByRole(container, 'button', { name: `Set ${label} to ${endpoint}` })))
+          assert.doesNotMatch(container.textContent, /NaN|Infinity|concept illustration/)
+          assert.ok(container.querySelector('.lab-visual').textContent.length > 0)
+        }
+      })
+    }
     for (let value = 0; value < 100; value++) {
-      const small = models.forestModel(value), large = models.forestModel(value + 1)
+      const small = advanced.trainedForestModel(value), large = advanced.trainedForestModel(value + 1)
       assert.deepEqual(large.votes.slice(0, small.count), small.votes, 'Adding a tree must not change prior votes')
     }
     let previousError = models.boostingModel(0).mse
@@ -202,11 +216,92 @@ async function runComponentSmoke() {
         await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Check decision/ })))
         if (step < 4) await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Next decision/ })))
       }
-      await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Complete ·/ })))
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Finish plan ·/ })))
+      await setRoute(`#/project/${project.slug}/build`)
+      assert.deepEqual(JSON.parse(localStorage.getItem('ml-quest-progress-v2')).builds || [], [])
+      assert.ok(getByRole(container, 'button', { name: /Finish build/ }).disabled, 'Planning alone cannot complete a build')
       await setRoute(`#/project/${project.slug}`)
+      getByText(container, 'Decision 1 of 5')
       await remount()
       getByText(container, 'Decision 1 of 5')
     })
+
+    const projectModels = await server.ssrLoadModule('/src/projectModels.ts')
+    const realProjectRun = async (code, tests) => {
+      const result = spawnSync('python3', ['-c', `import json\nlearner={}\nexec(${JSON.stringify(code)},learner)\n${tests}\nprint('ARTIFACT:'+json.dumps(artifact))`], { encoding: 'utf8', timeout: 20000 })
+      return result.status === 0 ? { ok: true, output: result.stdout.split('ARTIFACT:')[0], artifact: JSON.parse(result.stdout.split('ARTIFACT:')[1]), durationMs: 10 } : { ok: false, output: '', error: result.stderr, durationMs: 10 }
+    }
+    globalThis.__mlqProjectRunner = realProjectRun
+    for (const spec of Object.values(projectModels.PROJECT_SPECS)) {
+      const solution = projectModels.projectSolution(spec), expected = await realProjectRun(solution, projectModels.projectHarness(spec))
+      const seed = window => {
+        window.location.hash = `#/project/${spec.slug}/build`
+        window.localStorage.setItem('ml-quest-progress-v2', JSON.stringify({ ...emptyProgress, capstones: [spec.slug] }))
+        window.localStorage.setItem(`ml-quest-build-v1:${spec.slug}`, JSON.stringify({ code: solution }))
+      }
+      await withMountedDom(React.createElement(App), async (container, remount) => {
+        assert.ok(getByRole(container, 'button', { name: /Finish build/ }).disabled)
+        await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Train & evaluate/ })))
+        getByText(container, 'Evaluation passed')
+        assert.ok(getByRole(container, 'button', { name: /Download project kit/ }).disabled)
+        await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Launch portable predictor/ })))
+        const frame = container.querySelector('iframe'), nonce = JSON.parse(frame.getAttribute('srcdoc').match(/, nonce=("[^"]*");/)[1])
+        const message = { type: 'mlq-predictor-ready', nonce, predictions: expected.artifact.vectors.map(v => v.prediction) }
+        await act(async () => window.dispatchEvent(new window.MessageEvent('message', { source: frame.contentWindow, data: { ...message, nonce: 'stale-preview' } })))
+        assert.ok(getByRole(container, 'button', { name: /Finish build/ }).disabled, 'Stale preview messages cannot unlock completion')
+        await act(async () => window.dispatchEvent(new window.MessageEvent('message', { source: window, data: message })))
+        assert.ok(getByRole(container, 'button', { name: /Finish build/ }).disabled, 'Unrelated frames cannot unlock completion')
+        await act(async () => window.dispatchEvent(new window.MessageEvent('message', { source: frame.contentWindow, data: message })))
+        assert.equal(getByRole(container, 'button', { name: /Download project kit/ }).disabled, false)
+        await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Finish build/ })))
+        assert.deepEqual(JSON.parse(localStorage.getItem('ml-quest-progress-v2')).builds, [spec.slug])
+        await setRoute(`#/project/${spec.slug}`); getByText(container, 'Decision 1 of 5')
+        await setRoute(`#/project/${spec.slug}/build`)
+        await remount()
+        getByText(container, 'Evaluation passed')
+        assert.ok(getByRole(container, 'button', { name: /Download project kit/ }).disabled, 'Reload requires a fresh export smoke check')
+        const editor = getByRole(container, 'textbox', { name: `Project code for ${spec.title}` })
+        await act(async () => fireEvent.input(editor, { target: { value: `${solution}\n# my edit` } }))
+        assert.equal(container.querySelector('.evaluation-report'), null, 'Editing invalidates evaluated artifacts')
+        const savedDraft = localStorage.getItem(`ml-quest-build-v1:${spec.slug}`)
+        await setRoute('#/'); window.confirm = () => true
+        await act(async () => fireEvent.click(getByRole(container, 'button', { name: 'Reset progress' })))
+        assert.equal(localStorage.getItem(`ml-quest-build-v1:${spec.slug}`), savedDraft, 'Progress reset preserves project code')
+      }, seed)
+    }
+    const staleSpec = projectModels.PROJECT_SPECS['price-a-home'], staleSolution = projectModels.projectSolution(staleSpec)
+    const staleResult = await realProjectRun(staleSolution, projectModels.projectHarness(staleSpec))
+    let resolvePending
+    globalThis.__mlqProjectRunner = () => new Promise(resolve => { resolvePending = resolve })
+    await withMountedDom(React.createElement(App), async container => {
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Train & evaluate/ })))
+      const editor = getByRole(container, 'textbox', { name: `Project code for ${staleSpec.title}` })
+      await act(async () => fireEvent.input(editor, { target: { value: `${staleSolution}\n# edited during run` } }))
+      await act(async () => resolvePending(staleResult))
+      assert.equal(container.querySelector('.evaluation-report'), null, 'Late success cannot verify edited code')
+      assert.ok(getByRole(container, 'button', { name: /Finish build/ }).disabled)
+    }, window => {
+      window.location.hash = '#/project/price-a-home/build'
+      window.localStorage.setItem('ml-quest-progress-v2', JSON.stringify({ ...emptyProgress, capstones: ['price-a-home'] }))
+      window.localStorage.setItem('ml-quest-build-v1:price-a-home', JSON.stringify({ code: staleSolution }))
+    })
+    globalThis.__mlqProjectRunner = realProjectRun
+    await withMountedDom(React.createElement(App), async container => {
+      getByRole(container, 'alert')
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Train & evaluate/ })))
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Launch portable predictor/ })))
+      const frame = container.querySelector('iframe'), nonce = JSON.parse(frame.getAttribute('srcdoc').match(/, nonce=("[^"]*");/)[1])
+      await act(async () => window.dispatchEvent(new window.MessageEvent('message', { source: frame.contentWindow, data: { type: 'mlq-predictor-ready', nonce, predictions: staleResult.artifact.vectors.map(v => v.prediction) } })))
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Finish build/ })))
+      getByRole(container, 'button', { name: /Build milestone earned/ })
+      getByRole(container, 'alert')
+    }, window => {
+      window.location.hash = '#/project/price-a-home/build'
+      window.localStorage.setItem('ml-quest-progress-v2', JSON.stringify({ ...emptyProgress, capstones: ['price-a-home'] }))
+      window.localStorage.setItem('ml-quest-build-v1:price-a-home', JSON.stringify({ code: staleSolution }))
+      window.Storage.prototype.setItem = () => { throw new Error('Quota exceeded') }
+    })
+    delete globalThis.__mlqProjectRunner
 
     const challenge = {
       title: 'Persistence smoke quest',
@@ -266,7 +361,7 @@ const challengeSlugs = [...challenges.matchAll(/^\s{2}'([^']+)': \{/gm)].map(mat
 const missingChallenges = lessonSlugs.filter(slug => !challengeSlugs.includes(slug))
 const orphanChallenges = challengeSlugs.filter(slug => !lessonSlugs.includes(slug))
 if (missingChallenges.length || orphanChallenges.length) throw new Error(`Lesson/challenge mismatch: missing ${missingChallenges.join(', ') || 'none'}, orphaned ${orphanChallenges.join(', ') || 'none'}`)
-for (const component of ['Logistic', 'Neighbors', 'SupportVector', 'DecisionTree', 'Forest', 'Boosting']) if (!labs.includes(`function ${component}`)) throw new Error(`${component} animation is missing`)
+// Each lesson lab is rendered and exercised below; component names are not behavior.
 if (!app.includes('buildReviewQueue') || !app.includes("page: 'review'")) throw new Error('Adaptive review route is missing')
 if (!app.includes("page: 'playground'") || !playground.includes('runExperiment') || !playground.includes('parseCsv') || !playground.includes('Download .md brief')) throw new Error('Dataset playground workflow is incomplete')
 

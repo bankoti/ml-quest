@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { LabType } from './curriculum'
-import { boostingData, boostingModel, classificationData, confusionModel, forestModel, gradientModel, neighborData, neighborModel, regressionModel, svmData, svmModel } from './labModels'
+import { boostingData, boostingModel, classificationData, confusionModel, gradientModel, neighborData, neighborModel, regressionModel, svmData, svmModel } from './labModels'
+import { ComputedLab, COMPUTED_NOTES, computedDisplay } from './ComputedLabs'
 
 const points = [
   [10, 72, 0], [17, 58, 0], [22, 78, 0], [29, 45, 0], [34, 68, 0], [39, 32, 0],
@@ -32,14 +33,6 @@ function Scatter({ value, mode }: { value: number; mode: LabType }) {
   </>
 }
 
-function Bars({ value, lab }: { value: number; lab: LabType }) {
-  const names = lab === 'crossval' ? ['fold 1', 'fold 2', 'fold 3', 'fold 4', 'fold 5'] : lab === 'ensemble' ? ['tree 1', 'tree 2', 'tree 3', 'tree 4', 'vote'] : ['train', 'validation', 'test', 'future']
-  const heights = names.map((_, index) => clamp(42 + ((value * (index + 3) * 7) % 49) - (lab === 'regularize' ? Math.abs(value - 58) / 2 : 0), 18, 94))
-  return <div className="bar-lab">
-    <div className="bars">{names.map((name, index) => <div className="bar-item" key={name}><span style={{ height: `${heights[index]}%` }}><b>{Math.round(heights[index])}</b></span><small>{name}</small></div>)}</div>
-    <div className="lab-readout"><span>Mean <strong>{Math.round(heights.reduce((a, b) => a + b, 0) / heights.length)}</strong></span><span>Spread <strong>{Math.round(Math.max(...heights) - Math.min(...heights))}</strong></span></div>
-  </div>
-}
 
 function Matrix({ value }: { value: number }) {
   const { tp, fn, fp, tn, precision, recall, threshold } = confusionModel(value)
@@ -109,17 +102,6 @@ function SupportVector({ value }: { value: number }) {
   </svg><div className="lab-readout" role="status"><span>Support vectors <strong>{model.support.filter(Boolean).length}</strong></span><span>Half-margin <strong>{model.margin.toFixed(2)}</strong></span><span>Violations <strong>{model.violations}</strong></span></div></div>
 }
 
-function DecisionTree({ value }: { value: number }) {
-  const depth = Math.max(1, Math.min(4, 1 + Math.round(value / 34)))
-  const nodes = Array.from({ length: depth + 1 }, (_, level) => Array.from({ length: 2 ** level }, (_, index) => ({ level, index, x: (index + .5) / 2 ** level * 100, y: 9 + level * (70 / depth) }))).flat()
-  const lines = nodes.filter(node => node.level > 0).map(node => { const parent = nodes.find(item => item.level === node.level - 1 && item.index === Math.floor(node.index / 2))!; return { ...node, parentX: parent.x, parentY: parent.y } })
-  return <div className="tree-lab"><svg viewBox="0 0 100 86" preserveAspectRatio="none" aria-label={`Decision tree with depth ${depth}`}>{lines.map((line, index) => <line key={index} x1={line.parentX} y1={line.parentY} x2={line.x} y2={line.y}/>)}{nodes.map(node => <g key={`${node.level}-${node.index}`} className={node.level === depth ? `leaf leaf-${node.index % 2}` : 'split'}><circle cx={node.x} cy={node.y} r={node.level === depth ? 3.6 : 4.5}/>{node.level < depth && <text x={node.x} y={node.y + 1.3}>{['x₁?', 'x₂?', 'x₃?', 'x₄?'][node.level]}</text>}</g>)}</svg><div className="tree-regions">{Array.from({ length: 2 ** depth }, (_, index) => <i key={index} className={`region-${index % 2}`}/>)}</div><div className="lab-readout"><span>Depth <strong>{depth}</strong></span><span>Leaves <strong>{2 ** depth}</strong></span><span>Capacity <strong>{depth < 3 ? 'simple' : 'flexible'}</strong></span></div></div>
-}
-
-function Forest({ value }: { value: number }) {
-  const { count, votes, positive, prediction: final } = forestModel(value)
-  return <div className="forest-lab"><div className="forest-trees">{votes.map((vote, index) => <div className="mini-tree" key={index} style={{ animationDelay: `${index * 45}ms` }}><svg viewBox="0 0 50 58"><line x1="25" y1="8" x2="12" y2="29"/><line x1="25" y1="8" x2="38" y2="29"/><line x1="12" y1="29" x2="7" y2="49"/><line x1="12" y1="29" x2="19" y2="49"/><line x1="38" y1="29" x2="32" y2="49"/><line x1="38" y1="29" x2="44" y2="49"/><circle cx="25" cy="8" r="4"/><circle cx="12" cy="29" r="3"/><circle cx="38" cy="29" r="3"/></svg><b className={`vote-${vote}`}>{vote}</b><span>tree {index + 1}</span></div>)}</div><div className="forest-vote"><span>forest vote</span><strong className={`vote-${final}`}>class {final}</strong><i>{positive} of {count} vote green</i></div><div className="lab-readout"><span>Trees <strong>{count}</strong></span><span>Agreement <strong>{Math.round(Math.max(positive, count - positive) / count * 100)}%</strong></span></div></div>
-}
 
 function Boosting({ value }: { value: number }) {
   const rounds = Math.max(1, Math.min(5, 1 + Math.round(value / 25)))
@@ -145,54 +127,18 @@ function Gradient({ value, steps }: { value: number; steps: number }) {
   </svg><div className="lab-readout" role="status"><span>Step <strong>{steps}</strong></span><span>Weight <strong>{model.weight.toPrecision(3)}</strong></span><span>Loss <strong>{model.loss.toPrecision(3)}</strong></span></div></div>
 }
 
-function Clusters({ value, projection = false }: { value: number; projection?: boolean }) {
-  const k = Math.max(2, Math.round(value / 22) + 1)
-  return <div className="cluster-lab">
-    {Array.from({ length: 26 }, (_, index) => {
-      const group = index % 3
-      const left = 18 + group * 30 + ((index * 17) % 17)
-      const top = 22 + ((index * 29 + group * 11) % 55)
-      return <i key={index} className={`cluster-point cluster-${projection ? (left + top > 100 ? 1 : 0) : group % k}`} style={{ left: `${left}%`, top: `${top}%` }} />
-    })}
-    {projection && <div className="projection-line" style={{ rotate: `${value * 1.8 - 90}deg` }} />}
-    {!projection && Array.from({ length: Math.min(k, 5) }, (_, index) => <b key={index} className={`centroid centroid-${index}`} style={{ left: `${20 + index * 16}%`, top: `${35 + (index % 2) * 25}%` }}>×</b>)}
-  </div>
-}
-
-function Network({ value }: { value: number }) {
-  const hidden = Math.max(2, Math.round(value / 14))
-  const layers = [3, hidden, hidden, 2].map((count, layer) => Array.from({ length: count }, (_, i) => ({ x: 40 + layer * 100, y: 22 + (i + .5) * 172 / count })))
-  const weights = hidden * hidden + hidden * 5
-  return <div className="computed-lab"><svg className="model-plot network-diagram" viewBox="0 0 380 240" role="img" aria-label={`Fully connected network: 3 inputs, two hidden layers of ${hidden} units, 2 outputs; ${weights} weights`}>
-    {layers.slice(0, -1).flatMap((layer, l) => layer.flatMap((from, i) => layers[l + 1].map((to, j) => <line className="network-edge" key={`${l}-${i}-${j}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y}/>)))}
-    {layers.flatMap((layer, l) => layer.map((point, i) => <circle key={`${l}-${i}`} className={`network-unit layer-${l}`} cx={point.x} cy={point.y} r="7"/>))}
-    {['Input', 'Hidden 1', 'Hidden 2', 'Output'].map((label, i) => <text key={label} x={40 + i * 100} y="221" textAnchor="middle">{label}</text>)}
-  </svg><div className="lab-readout"><span>Weights <strong>{weights}</strong></span><span>Biases <strong>{2 * hidden + 2}</strong></span><span>Total parameters <strong>{weights + 2 * hidden + 2}</strong></span></div></div>
-}
-
-function Attention({ value }: { value: number }) {
-  const words = ['The', 'model', 'found', 'a', 'pattern', 'in', 'data']
-  const active = Math.min(words.length - 1, Math.floor(value / 15))
-  return <div className="attention-lab">
-    <p>{words.map((word, index) => <span key={word} className={index === active ? 'active' : ''} style={{ '--weight': Math.max(.12, 1 - Math.abs(index - active) * .18) } as React.CSSProperties}>{word}</span>)}</p>
-    <div className="attention-bars">{words.map((word, index) => <i key={word} style={{ height: `${Math.max(12, 100 - Math.abs(index - active) * 22)}%` }} />)}</div>
-    <small>attention from “{words[active]}”</small>
-  </div>
-}
-
-function FeatureToggles({ value, lab }: { value: number; lab: LabType }) {
-  const labels = lab === 'vision' ? ['vertical edge', 'horizontal edge', 'texture'] : lab === 'recommend' ? ['adventure', 'comedy', 'slow cinema'] : ['signal A', 'signal B', 'noise C']
-  return <div className={`feature-lab feature-${lab}`}>
-    <div className="feature-cards">{labels.map((label, index) => <div key={label} className={value / 34 > index ? 'on' : ''}><i>{lab === 'vision' ? ['▥','▤','▦'][index] : ['A','B','C'][index]}</i><span>{label}</span></div>)}</div>
-    <div className="signal"><span style={{ width: `${clamp(30 + value * .62)}%` }} /></div>
-    <div className="lab-readout"><span>Useful signal <strong>{Math.round(42 + value * .48)}%</strong></span><span>Complexity <strong>{Math.ceil(value / 26)}</strong></span></div>
-  </div>
-}
 
 export function InteractiveLab({ lab, compact = false }: { lab: LabType; compact?: boolean }) {
-  const [value, setValue] = useState(lab === 'regression' ? 58 : lab === 'gradient' ? 24 : 52)
+  const [value, setValue] = useState(lab === 'regression' ? 58 : lab === 'gradient' ? 24 : lab === 'network' ? 0 : 52)
   const [steps, setSteps] = useState(0)
-  useEffect(() => { setValue(lab === 'regression' ? 58 : lab === 'gradient' ? 24 : 52); setSteps(0) }, [lab])
+  const [playing, setPlaying] = useState(false)
+  useEffect(() => { setValue(lab === 'regression' ? 58 : lab === 'gradient' ? 24 : lab === 'network' ? 0 : 52); setSteps(0); setPlaying(false) }, [lab])
+  useEffect(() => {
+    if (!playing || lab !== 'network') return
+    if (value >= 100) { setPlaying(false); return }
+    const timer = window.setTimeout(() => setValue(v => Math.min(100, v + 2)), 160)
+    return () => window.clearTimeout(timer)
+  }, [playing, value, lab])
   const labels = useMemo(() => {
     const map: Partial<Record<LabType, [string, string, string]>> = {
       regression: ['line slope', 'flat', 'steep'], classifier: ['decision threshold', 'more positives', 'fewer positives'],
@@ -205,7 +151,7 @@ export function InteractiveLab({ lab, compact = false }: { lab: LabType; compact
       regularize: ['regularization', 'flexible', 'constrained'], crossval: ['validation folds', 'few', 'many'],
       cluster: ['number of clusters', 'few', 'many'], projection: ['projection angle', '0°', '180°'],
       anomaly: ['sensitivity', 'quiet', 'alert'], recommend: ['taste profile', 'broad', 'specific'],
-      network: ['network width', 'tiny', 'wide'], vision: ['filter mix', 'edges', 'texture'],
+      network: ['training steps', 'untrained', '500 steps'], vision: ['convolution kernel', 'vertical edge', 'Laplacian'],
       attention: ['focus token', 'start', 'end'], monitor: ['live data drift', 'stable', 'shifted'],
       pattern: ['decision boundary', 'left', 'right'], data: ['data quality', 'noisy', 'clean'],
       baseline: ['positive class share', 'rare', 'common'], leakage: ['suspicious signal', 'off', 'leaked'],
@@ -214,22 +160,16 @@ export function InteractiveLab({ lab, compact = false }: { lab: LabType; compact
   }, [lab])
 
   let visual: React.ReactNode
-  if (['pattern', 'data'].includes(lab)) visual = <Scatter value={value} mode={lab} />
+  if (COMPUTED_NOTES[lab]) visual = <ComputedLab lab={lab} value={value} setValue={setValue}/>
+  else if (lab === 'pattern') visual = <Scatter value={value} mode={lab} />
   else if (lab === 'regression' || lab === 'loss') visual = <Regression value={value} outlier={lab === 'loss'} />
   else if (lab === 'classifier') visual = <Logistic value={value} />
   else if (lab === 'knn') visual = <Neighbors value={value} />
   else if (lab === 'svm') visual = <SupportVector value={value} />
-  else if (lab === 'tree') visual = <DecisionTree value={value} />
-  else if (lab === 'forest') visual = <Forest value={value} />
   else if (lab === 'boosting') visual = <Boosting value={value} />
-  else if (['split', 'baseline', 'ensemble', 'regularize', 'crossval', 'monitor'].includes(lab)) visual = <Bars value={value} lab={lab} />
-  else if (['confusion', 'tradeoff', 'leakage'].includes(lab)) visual = <Matrix value={value} />
+  else if (['confusion', 'tradeoff'].includes(lab)) visual = <Matrix value={value} />
   else if (lab === 'gradient') visual = <Gradient value={value} steps={steps} />
-  else if (lab === 'cluster') visual = <Clusters value={value} />
-  else if (lab === 'projection' || lab === 'anomaly') visual = <Clusters value={value} projection />
-  else if (lab === 'network') visual = <Network value={value} />
-  else if (lab === 'attention') visual = <Attention value={value} />
-  else visual = <FeatureToggles value={value} lab={lab} />
+  else visual = null
 
   const notes: Partial<Record<LabType, string>> = {
     pattern: 'Blue and coral show true classes. A diamond marks a wrong prediction. Move the boundary to change the rule.',
@@ -240,10 +180,7 @@ export function InteractiveLab({ lab, compact = false }: { lab: LabType; compact
     tradeoff: 'Fewer alerts can mean fewer false alarms but more missed positives. Precision is undefined when there are no positive predictions.',
     knn: 'The dashed ring reaches the kth neighbor. Numbered points vote: blue = class 0, green = class 1. Both axes use the same scale.',
     svm: 'A fitted one-feature SVM; vertical spacing only separates examples. Gold rings mark support vectors on or inside the margin. Larger C penalizes violations more. Two mislabeled points keep the classes overlapping.',
-    tree: 'Architecture sketch of a full binary tree. A depth-d tree can have up to 2ᵈ leaves; a fitted tree may stop earlier. Colors illustrate possible leaf predictions.',
-    forest: 'Voting demonstration for one fixed example: each added tree keeps the earlier votes unchanged. Blue = 0, green = 1; ties choose 0. Agreement is not test accuracy.',
     boosting: 'Squared-error boosting fitted to 8 points. Each stump fits the current residuals, then adds half its prediction (learning rate 0.5). Blue = observed, orange = prediction. Training error is not a test score.',
-    network: 'Architecture sketch: each edge is one weight. Each hidden or output unit also has a bias. Width changes capacity; this view does not train the network.',
     gradient: 'Each click applies w ← w − α·2w to L(w) = w². Rates below 1 converge; above 1 diverge. Changing the rate restarts the experiment.',
   }
   const display = lab === 'regression' ? regressionModel(value).slope.toFixed(2)
@@ -253,15 +190,14 @@ export function InteractiveLab({ lab, compact = false }: { lab: LabType; compact
     : lab === 'knn' ? `k = ${neighborModel(value).k}`
     : lab === 'svm' ? svmModel(value).c.toFixed(2)
     : lab === 'gradient' ? `α = ${gradientModel(value, steps).rate.toFixed(2)}`
-    : lab === 'forest' ? `${forestModel(value).count} trees`
     : lab === 'boosting' ? `${Math.min(5, 1 + Math.round(value / 25))} rounds`
-    : lab === 'network' ? `${Math.max(2, Math.round(value / 14))} units / hidden layer` : undefined
-  const sketch = !notes[lab] || ['tree', 'forest', 'network'].includes(lab)
+    : computedDisplay(lab, value)
   return <div className={`interactive-lab ${compact ? 'compact' : ''}`}>
-    <div className="lab-topline"><span><i /> {sketch ? 'concept illustration' : 'computed example'}</span><b>{lab.replace('-', ' ')}</b></div>
+    <div className="lab-topline"><span><i /> computed experiment</span><b>{lab.replace('-', ' ')}</b></div>
     <div className="lab-visual">{visual}</div>
     <Slider value={value} display={display} onChange={next => { setValue(next); if (lab === 'gradient') setSteps(0) }} label={labels[0]} left={labels[1]} right={labels[2]} />
     {lab === 'gradient' && <div className="training-controls"><button className="lab-step-button" disabled={steps >= 25} onClick={() => setSteps(current => current + 1)}>Take one training step <span>→</span></button><button className="lab-restart" onClick={() => setSteps(0)}>Restart</button></div>}
-    {!compact && <p className="model-explanation">{notes[lab] || 'Concept illustration with illustrative values, not the output of a fitted model. Use the Python quest and Data lab to test the idea on actual data.'}</p>}
+    {lab === 'network' && <div className="training-controls"><button className="lab-step-button" onClick={() => { if (value >= 100) setValue(0); setPlaying(!playing) }}>{playing ? 'Pause training' : value >= 100 ? 'Replay training →' : 'Animate training →'}</button><button className="lab-restart" onClick={() => { setPlaying(false); setValue(0) }}>Restart</button></div>}
+    {!compact && <p className="model-explanation">{COMPUTED_NOTES[lab] || notes[lab]}</p>}
   </div>
 }
