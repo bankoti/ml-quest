@@ -1,4 +1,5 @@
 import { readFile, stat, unlink, writeFile } from 'node:fs/promises'
+import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { fireEvent, getByRole, getByText, waitFor } from '@testing-library/dom'
@@ -10,7 +11,7 @@ import reactPlugin from '@vitejs/plugin-react'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
-async function withMountedDom(element, assertion) {
+async function withMountedDom(element, assertion, setup = () => {}) {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { pretendToBeVisual: true, url: 'http://localhost/' })
   const globalValues = {
     window: dom.window,
@@ -30,13 +31,19 @@ async function withMountedDom(element, assertion) {
   }
   const previous = new Map(Object.keys(globalValues).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
   for (const [key, value] of Object.entries(globalValues)) Object.defineProperty(globalThis, key, { value, configurable: true, writable: true })
+  dom.window.scrollTo = () => {}
+  dom.window.HTMLElement.prototype.scrollIntoView = () => {}
+  setup(dom.window)
 
   const rootElement = dom.window.document.getElementById('root')
   const { createRoot } = await import('react-dom/client')
   const root = createRoot(rootElement)
   try {
     await act(async () => { root.render(element) })
-    await assertion(rootElement)
+    await assertion(rootElement, async () => {
+      await act(async () => root.render(null))
+      await act(async () => root.render(element))
+    })
   } finally {
     await act(async () => { root.unmount() })
     for (const [key, descriptor] of previous) {
@@ -73,9 +80,12 @@ async function runComponentSmoke() {
   })
 
   try {
-    const [{ InteractiveLab }, { CodeLab }] = await Promise.all([
+    const [{ InteractiveLab }, { CodeLab }, models, { App, resumeHref }, { CAPSTONES }] = await Promise.all([
       server.ssrLoadModule('/src/Lab.tsx'),
       server.ssrLoadModule('/src/CodeLab.tsx'),
+      server.ssrLoadModule('/src/labModels.ts'),
+      server.ssrLoadModule('/src/App.tsx'),
+      server.ssrLoadModule('/src/capstones.ts'),
     ])
 
     await withMountedDom(React.createElement(InteractiveLab, { lab: 'classifier' }), async container => {
@@ -85,10 +95,117 @@ async function runComponentSmoke() {
       if (!controlValue) throw new Error('Algorithm lab control readout is missing')
 
       await act(async () => { fireEvent.click(getByRole(container, 'button', { name: `Set ${label} to minimum` })) })
-      if (slider.value !== '0' || controlValue.textContent !== '0') throw new Error('Algorithm lab minimum endpoint control did not set the slider and readout to 0')
+      assert.equal(slider.value, '0')
+      assert.equal(controlValue.textContent, '0.15')
+      assert.equal(slider.getAttribute('aria-valuetext'), '0.15')
 
       await act(async () => { fireEvent.click(getByRole(container, 'button', { name: `Set ${label} to maximum` })) })
-      if (slider.value !== '100' || controlValue.textContent !== '100') throw new Error('Algorithm lab maximum endpoint control did not set the slider and readout to 100')
+      assert.equal(slider.value, '100')
+      assert.equal(controlValue.textContent, '0.85')
+    })
+
+    for (const value of [0, 20, 58, 100]) {
+      const model = models.regressionModel(value)
+      const actualMSE = model.data.reduce((sum, point) => sum + (point.y - (model.slope * point.x + model.intercept)) ** 2, 0) / model.data.length
+      assert.ok(Math.abs(model.mse - actualMSE) < 1e-10)
+    }
+    assert.ok(models.regressionModel(58).mse < models.regressionModel(0).mse)
+    assert.ok(models.regressionModel(100, true).mse > models.regressionModel(0, true).mse)
+    let lastTP = 12, lastFP = 12
+    for (let value = 0; value <= 100; value++) {
+      const m = models.confusionModel(value)
+      assert.equal(m.tp + m.fn, 6)
+      assert.equal(m.fp + m.tn, 6)
+      assert.ok(m.tp <= lastTP && m.fp <= lastFP, 'Increasing a fixed-score threshold cannot add positive predictions')
+      lastTP = m.tp; lastFP = m.fp
+    }
+    assert.equal(models.confusionModel(100).precision, null)
+    for (const value of [0, 34, 68, 100]) {
+      const m = models.neighborModel(value)
+      assert.equal(m.selected.length, m.k)
+      assert.ok(m.selected.every(point => point.distance <= m.radius))
+      assert.equal(m.selected.at(-1).distance, m.radius)
+    }
+    const lowSVM = models.svmModel(0), highSVM = models.svmModel(100)
+    assert.ok(lowSVM.margin > highSVM.margin)
+    for (const value of [0, 25, 50, 75, 100]) {
+      const m = models.svmModel(value)
+      const objective = w => .5 * w * w + m.c * models.svmData.reduce((sum, p) => sum + Math.max(0, 1 - p.label * w * p.x), 0)
+      for (const alternative of [m.weight - .01, m.weight + .01, 0, 3]) assert.ok(objective(m.weight) <= objective(alternative) + 1e-8)
+      m.support.forEach((support, i) => assert.equal(support, models.svmData[i].label * m.weight * models.svmData[i].x <= 1 + 1e-8))
+    }
+    for (let value = 0; value < 100; value++) {
+      const small = models.forestModel(value), large = models.forestModel(value + 1)
+      assert.deepEqual(large.votes.slice(0, small.count), small.votes, 'Adding a tree must not change prior votes')
+    }
+    let previousError = models.boostingModel(0).mse
+    for (let round = 1; round <= 5; round++) {
+      const m = models.boostingModel(round)
+      assert.ok(m.mse < previousError)
+      assert.deepEqual(m.history.slice(0, -1), models.boostingModel(round - 1).history)
+      assert.equal(m.mse, models.mse(models.boostingData.map(p => p.y), m.predictions))
+      previousError = m.mse
+    }
+    assert.ok(models.gradientModel(24, 8).loss < models.gradientModel(24, 0).loss)
+    assert.ok(models.gradientModel(100, 8).loss > models.gradientModel(100, 0).loss)
+
+    await withMountedDom(React.createElement(InteractiveLab, { lab: 'tradeoff' }), async container => {
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: 'Set decision threshold to minimum' })))
+      assert.match(getByRole(container, 'status').textContent, /Recall\s*100%/)
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: 'Set decision threshold to maximum' })))
+      assert.match(getByRole(container, 'status').textContent, /Recall\s*0%/)
+      assert.match(getByRole(container, 'status').textContent, /no alerts/)
+    })
+
+    const emptyProgress = { lessons: [], code: [], activeDates: [], capstones: [], review: {} }
+    const setRoute = async hash => act(async () => { window.location.hash = hash; window.dispatchEvent(new window.HashChangeEvent('hashchange')) })
+    await withMountedDom(React.createElement(App), async (container, remount) => {
+      assert.equal(resumeHref({ lessons: ['machines-that-learn'], code: [] }), '#/lesson/machines-that-learn/code')
+      await setRoute('#/lesson/linear-regression/experiment')
+      getByRole(container, 'button', { name: 'Step 2: Experiment', current: 'step' })
+      assert.equal(resumeHref(emptyProgress), '#/lesson/linear-regression/experiment')
+      window.localStorage.setItem('ml-quest-bookmark-v1', JSON.stringify({ slug: 'linear-regression', step: 4 }))
+      assert.equal(resumeHref({ lessons: [], code: ['linear-regression'] }), '#/lesson/linear-regression')
+      await remount()
+      getByRole(container, 'button', { name: 'Step 2: Experiment', current: 'step' })
+      await setRoute('#/lesson/machines-that-learn/checkpoint')
+      await act(async () => fireEvent.click(getByRole(container, 'radio', { name: /Examples paired with answers/ })))
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Check answer/ })))
+      await setRoute('#/')
+      assert.equal(getByRole(container, 'link', { name: /Continue your quest/ }).getAttribute('href'), '#/lesson/machines-that-learn/code')
+      await remount()
+      assert.equal(getByRole(container, 'link', { name: /Continue your quest/ }).getAttribute('href'), '#/lesson/machines-that-learn/code')
+    })
+
+    const project = CAPSTONES[0]
+    await withMountedDom(React.createElement(App), async (container, remount) => {
+      await setRoute(`#/project/${project.slug}`)
+      for (let step = 0; step < 2; step++) {
+        const decision = project.decisions[step]
+        const radios = container.querySelectorAll('[role="radio"]')
+        await act(async () => fireEvent.click(radios[decision.correct]))
+        await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Check decision/ })))
+        await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Next decision/ })))
+      }
+      await act(async () => fireEvent.click(container.querySelectorAll('[role="radio"]')[1]))
+      const exit = getByRole(container, 'link', { name: 'Save & exit' })
+      await setRoute(exit.getAttribute('href'))
+      getByRole(container, 'link', { name: /Decision 3 of 5 Resume project/ })
+      await setRoute(`#/project/${project.slug}`)
+      getByText(container, 'Decision 3 of 5')
+      assert.equal(container.querySelectorAll('[role="radio"]')[1].getAttribute('aria-checked'), 'true')
+      await remount()
+      getByText(container, 'Decision 3 of 5')
+      assert.equal(container.querySelectorAll('[role="radio"]')[1].getAttribute('aria-checked'), 'true')
+      for (let step = 2; step < project.decisions.length; step++) {
+        await act(async () => fireEvent.click(container.querySelectorAll('[role="radio"]')[project.decisions[step].correct]))
+        await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Check decision/ })))
+        if (step < 4) await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Next decision/ })))
+      }
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Complete ·/ })))
+      await setRoute(`#/project/${project.slug}`)
+      await remount()
+      getByText(container, 'Decision 1 of 5')
     })
 
     const challenge = {
