@@ -198,7 +198,7 @@ export function InteractiveLab({ lab, compact = false }: { lab: LabType; compact
       regression: ['line slope', 'flat', 'steep'], classifier: ['decision threshold', 'more positives', 'fewer positives'],
       knn: ['neighbor count (k)', '1 neighbor', '7 neighbors'], svm: ['C penalty', '0.05 · tolerant', '5.00 · strict'],
       forest: ['trees in forest', 'one tree', 'many trees'], boosting: ['boosting rounds', 'first correction', 'full ensemble'],
-      confusion: ['decision threshold', 'more recall', 'more precision'], tradeoff: ['decision threshold', 'high recall', 'high precision'],
+      confusion: ['decision threshold', '0 · all positive', '1 · none positive'], tradeoff: ['decision threshold', '0 · all positive', '1 · none positive'],
       split: ['training share', 'small train set', 'small test set'], tree: ['tree depth', 'simple', 'complex'],
       ensemble: ['number of voters', 'one model', 'many models'], loss: ['outlier size', 'typical', 'extreme'],
       gradient: ['learning rate', 'careful', 'aggressive'], features: ['feature set', 'minimal', 'everything'],
