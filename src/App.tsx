@@ -53,9 +53,32 @@ function getXP(progress: ProgressState) {
   return progress.lessons.length * 100 + progress.code.length * 150 + progress.capstones.length * 500 + reviewXP
 }
 
+const BOOKMARK_KEY = 'ml-quest-bookmark-v1'
+const STEP_PATHS = ['', 'experiment', 'connect', 'checkpoint', 'code']
+function lessonHref(slug: string, step = 0) { return `#/lesson/${slug}${step ? `/${STEP_PATHS[step]}` : ''}` }
+function readBookmark(): { slug: string; step: number } | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(BOOKMARK_KEY) || 'null')
+    return saved && getLesson(saved.slug) && Number.isInteger(saved.step) && saved.step >= 0 && saved.step <= 4 ? saved : null
+  } catch { return null }
+}
+export function resumeHref(progress: Pick<ProgressState, 'lessons' | 'code'>) {
+  const bookmark = readBookmark()
+  const unfinished = (slug: string) => !progress.lessons.includes(slug) || !progress.code.includes(slug)
+  const next = bookmark && unfinished(bookmark.slug) ? getLesson(bookmark.slug) : LESSONS.find(item => unfinished(item.slug))
+  if (!next) return '#/certificate'
+  const savedStep = bookmark?.slug === next.slug ? bookmark.step : 0
+  const step = progress.lessons.includes(next.slug) && !progress.code.includes(next.slug) ? 4
+    : progress.code.includes(next.slug) && !progress.lessons.includes(next.slug) && savedStep === 4 ? 0 : savedStep
+  return lessonHref(next.slug, step)
+}
+
 function parseRoute(hash: string): Route {
-  const lesson = hash.match(/^#\/lesson\/([^/]+)(?:\/(code))?/)
-  if (lesson) return { page: 'lesson', slug: decodeURIComponent(lesson[1]), initialStep: lesson[2] ? 4 : 0 }
+  const lesson = hash.match(/^#\/lesson\/([^/]+)(?:\/([^/]+))?$/)
+  if (lesson) {
+    try { return { page: 'lesson', slug: decodeURIComponent(lesson[1]), initialStep: Math.max(0, STEP_PATHS.indexOf(lesson[2] || '')) } }
+    catch { return { page: 'home' } }
+  }
   const project = hash.match(/^#\/project\/([^/]+)/)
   if (project) return { page: 'project', slug: decodeURIComponent(project[1]) }
   if (hash.startsWith('#/practice')) return { page: 'practice' }
@@ -78,6 +101,11 @@ function useRoute() {
   }, [])
   useEffect(() => {
     if (route.page === 'home' && route.anchor) requestAnimationFrame(() => document.getElementById(route.anchor!)?.scrollIntoView())
+    else if (route.page === 'lesson' && route.initialStep) requestAnimationFrame(() => {
+      const copy = document.querySelector<HTMLElement>('.copy-inner')
+      copy?.focus({ preventScroll: true })
+      if (window.innerWidth <= 980) copy?.scrollIntoView({ block: 'start' })
+    })
     else window.scrollTo(0, 0)
   }, [route])
   return route
@@ -89,11 +117,13 @@ function Brand({ dark = false }: { dark?: boolean }) {
 
 function TopNav({ progress, dark = false }: { progress: ProgressState; dark?: boolean }) {
   const total = progress.lessons.length + progress.code.length
-  const next = LESSONS.find(item => !progress.lessons.includes(item.slug)) || LESSONS.find(item => !progress.code.includes(item.slug)) || LESSONS[0]
-  return <nav className={`site-nav ${dark ? 'nav-dark' : ''}`}>
+  const destinations = [['Course', 'curriculum'], ['Practice', 'practice'], ['Projects', 'projects'], ['Data lab', 'playground'], ['Review', 'review'], ['Reference', 'reference']]
+  const links = destinations.map(([label, path]) => <a key={path} href={`#/${path}`}>{label}</a>)
+  return <nav className={`site-nav ${dark ? 'nav-dark' : ''}`} aria-label="Main navigation">
     <Brand dark={dark}/>
-    <div className="nav-links"><a href="#/curriculum">Course</a><a href="#/practice">Practice</a><a href="#/projects">Projects</a><a href="#/playground">Data lab</a><a href="#/review">Review</a><a href="#/reference">Reference</a></div>
-    <a className="nav-progress" href={`#/lesson/${next.slug}`} aria-label={`${total} of ${TOTAL_CHECKS} mastery checks complete`}><span>{total}/{TOTAL_CHECKS}</span><i style={{ width: `${total / TOTAL_CHECKS * 100}%` }} /></a>
+    <div className="nav-links">{links}</div>
+    <a className="nav-progress" href={resumeHref(progress)} aria-label={`${total} of ${TOTAL_CHECKS} mastery checks complete; continue learning`}><span>{total}/{TOTAL_CHECKS}</span><i style={{ width: `${total / TOTAL_CHECKS * 100}%` }} /></a>
+    <details className="mobile-menu"><summary>Menu <span aria-hidden="true">☰</span></summary><div onClick={event => { if ((event.target as HTMLElement).closest('a')) event.currentTarget.closest('details')?.removeAttribute('open') }}>{links}</div></details>
   </nav>
 }
 
@@ -105,7 +135,7 @@ function ProgressRing({ value, total = TOTAL_CHECKS }: { value: number; total?: 
 function Home({ progress, reset }: { progress: ProgressState; reset: () => void }) {
   const completeSet = useMemo(() => new Set(progress.lessons), [progress.lessons])
   const codeSet = useMemo(() => new Set(progress.code), [progress.code])
-  const next = LESSONS.find(item => !completeSet.has(item.slug)) || LESSONS.find(item => !codeSet.has(item.slug)) || LESSONS[0]
+  const nextHref = resumeHref(progress)
   const mastery = progress.lessons.length + progress.code.length
   const streak = getStreak(progress.activeDates)
   const hasProgress = mastery > 0 || progress.capstones.length > 0 || Object.keys(progress.review).length > 0
@@ -116,9 +146,9 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
         <div className="hero-copy">
           <p className="eyebrow"><span>●</span> A complete zero-to-hero learning path</p>
           <h1>Teach machines to <em>see the pattern.</em></h1>
-          <p className="hero-lede">Learn machine learning by changing live models, writing real Python, and proving each idea with tests. Start with intuition and finish ready to build and ship a system.</p>
+          <p className="hero-lede">Learn machine learning through visual experiments and real Python. Build intuition, practice core algorithms, and learn how to evaluate and plan an ML system.</p>
           <div className="hero-actions">
-            <a className="button primary" href={`#/lesson/${next.slug}`}>{mastery ? 'Continue your quest' : 'Start learning'} <span>→</span></a>
+            <a className="button primary" href={nextHref}>{mastery ? 'Continue your quest' : 'Start learning'} <span>→</span></a>
             <a className="text-action" href="#/curriculum">Explore the full course ↓</a>
           </div>
           <div className="hero-stats"><span><b>{COURSE_SIZE}</b> visual lessons</span><span><b>{COURSE_SIZE}</b> Python quests</span><span><b>3</b> capstones</span></div>
@@ -173,7 +203,7 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
             <div className="lesson-grid">{stage.lessons.map((item, index) => {
               const done = completeSet.has(item.slug)
               const coded = codeSet.has(item.slug)
-              return <a href={`#/lesson/${item.slug}`} className={`lesson-card ${done ? 'done' : ''} ${coded ? 'mastered' : ''}`} key={item.slug}>
+              return <a href={lessonHref(item.slug, done && !coded ? 4 : 0)} className={`lesson-card ${done ? 'done' : ''} ${coded ? 'mastered' : ''}`} key={item.slug}>
                 <div className="lesson-top"><span>{coded ? '★' : done ? '✓' : String(offset + index + 1).padStart(2, '0')}</span><b>{item.minutes + 8} min</b></div>
                 <h4>{item.title}</h4><p>{item.description}</p>
                 <div className="card-checks"><span className={done ? 'yes' : ''}>✓ concept</span><span className={coded ? 'yes' : ''}>⌘ Python</span></div>
@@ -184,7 +214,7 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
         })}
       </section>
     </main>
-    <footer className="footer"><Brand dark/><div><b>{Math.round((TOTAL_MINUTES + COURSE_SIZE * 8) / 60)} hours</b><span>to practical ML mastery</span></div><p>Built to make machine learning click.</p></footer>
+    <footer className="footer"><Brand dark/><div><b>About {Math.round((TOTAL_MINUTES + COURSE_SIZE * 8) / 60)} hours</b><span>of guided lessons and coding practice</span></div><p>Built to make machine learning click.</p></footer>
   </div>
 }
 
@@ -206,27 +236,21 @@ function Quiz({ lesson, onComplete, completed }: { lesson: Lesson; onComplete: (
 }
 
 function LessonPage({ lesson, progress, initialStep = 0, onLessonComplete, onCodePass }: { lesson: Lesson; progress: ProgressState; initialStep?: number; onLessonComplete: (slug: string) => void; onCodePass: (slug: string) => void }) {
-  const [step, setStep] = useState(initialStep)
+  const step = initialStep
+  const setStep = (next: number) => { window.location.hash = lessonHref(lesson.slug, next) }
   const stage = getStageForLesson(lesson.slug)!
   const index = LESSONS.findIndex(item => item.slug === lesson.slug)
   const next = LESSONS[index + 1]
   const isComplete = progress.lessons.includes(lesson.slug)
   const codePassed = progress.code.includes(lesson.slug)
   const challenge = CODE_CHALLENGES[lesson.slug]
-  useEffect(() => setStep(initialStep), [lesson.slug, initialStep])
   useEffect(() => {
-    const key = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement) return
-      if (event.key === 'ArrowRight') setStep(current => Math.min(4, current + 1))
-      if (event.key === 'ArrowLeft') setStep(current => Math.max(0, current - 1))
-    }
-    window.addEventListener('keydown', key)
-    return () => window.removeEventListener('keydown', key)
-  }, [])
+    try { localStorage.setItem(BOOKMARK_KEY, JSON.stringify({ slug: lesson.slug, step })) } catch { /* Learning still works when device storage is unavailable. */ }
+  }, [lesson.slug, step])
 
   const steps = ['Observe', 'Experiment', 'Connect', 'Checkpoint', 'Code']
   return <div className="lesson-page" style={{ '--stage': stage.accent } as React.CSSProperties}>
-    <header className="lesson-header"><a className="back-link" href="#/" aria-label="Back to course map">←</a><Brand dark/><div className="step-rail step-rail-five" aria-label={`Step ${step + 1} of 5`}>{steps.map((name, stepIndex) => <button key={name} className={stepIndex === step ? 'current' : stepIndex < step ? 'past' : ''} onClick={() => setStep(stepIndex)}><i/><span>{name}</span></button>)}</div><div className="lesson-count">{String(index + 1).padStart(2, '0')} / {LESSONS.length}</div></header>
+    <header className="lesson-header"><a className="back-link" href="#/" aria-label="Back to course map">←</a><Brand dark/><div className="step-rail step-rail-five" aria-label={`Step ${step + 1} of 5`}>{steps.map((name, stepIndex) => <button key={name} aria-label={`Step ${stepIndex + 1}: ${name}`} aria-current={stepIndex === step ? 'step' : undefined} className={stepIndex === step ? 'current' : stepIndex < step ? 'past' : ''} onClick={() => setStep(stepIndex)}><i/><span>{name}</span><b className="mobile-step-number">{stepIndex + 1}</b></button>)}</div><div className="lesson-count">{String(index + 1).padStart(2, '0')} / {LESSONS.length}</div></header>
     <main className={`lesson-main ${step === 4 ? 'coding-step' : ''}`}>
       <section className="lab-panel">
         <div className="lab-panel-heading"><span>Interactive workspace</span><b>{lesson.title}</b></div>
@@ -235,7 +259,7 @@ function LessonPage({ lesson, progress, initialStep = 0, onLessonComplete, onCod
         <div className="lesson-mastery"><span className={isComplete ? 'done' : ''}>✓ Concept</span><span className={codePassed ? 'done' : ''}>⌘ Python</span></div>
       </section>
       <section className="lesson-copy">
-        <div className="copy-inner">
+        <div className="copy-inner" tabIndex={-1} aria-label={`${steps[step]} lesson content`}>
           {step === 0 && <div className="lesson-step"><p className="lesson-kicker">Stage {stage.number} · {stage.shortTitle}</p><h1>{lesson.title}</h1><p className="lesson-lede">{lesson.description}</p><div className="objective"><span>Quest objective</span><p>{lesson.objective}</p></div><div className="copy-callout"><i>↗</i><p><b>Start with the model.</b> Move its control, look for what changes, and make a prediction before you continue.</p></div></div>}
           {step === 1 && <div className="lesson-step"><p className="lesson-kicker">Experiment</p><h1>Change one thing. Watch everything else.</h1><p className="lesson-lede">{lesson.experiment}</p><div className="experiment-steps"><div><span>1</span><p>Choose a starting position and note the result.</p></div><div><span>2</span><p>Move the control to both extremes.</p></div><div><span>3</span><p>Find the point where the behavior changes.</p></div></div><div className="copy-callout accent"><i>!</i><p>The number is less important than the relationship you observe.</p></div></div>}
           {step === 2 && <div className="lesson-step"><p className="lesson-kicker">Mental model</p><h1>Now give the pattern a name.</h1><p className="lesson-lede">{lesson.mentalModel}</p><div className="takeaways">{lesson.takeaways.map((item, takeIndex) => <div key={item}><span>0{takeIndex + 1}</span><p>{item}</p></div>)}</div><p className="memory-line"><b>Remember:</b> if you can predict what the lab will do next, the idea is already becoming yours.</p></div>}
@@ -243,8 +267,8 @@ function LessonPage({ lesson, progress, initialStep = 0, onLessonComplete, onCod
           {step === 4 && <div className="lesson-step"><CodeLab slug={lesson.slug} challenge={challenge} passed={codePassed} onPass={() => onCodePass(lesson.slug)}/></div>}
         </div>
         <div className="lesson-nav">
-          <button className="button ghost" disabled={step === 0} onClick={() => setStep(current => current - 1)}>← Back</button>
-          {step < 3 ? <button className="button primary" onClick={() => setStep(current => current + 1)}>{steps[step + 1]} <span>→</span></button> : step === 3 ? isComplete ? <button className="button primary" onClick={() => setStep(4)}>Code this idea <span>→</span></button> : <span className="finish-hint">Answer correctly to continue</span> : codePassed && next ? <a className="button primary" href={`#/lesson/${next.slug}`}>Next lesson <span>→</span></a> : codePassed ? <a className="button primary" href="#/certificate">Claim certificate <span>→</span></a> : <span className="finish-hint">Pass the tests to master</span>}
+          <button className="button ghost" disabled={step === 0} onClick={() => setStep(step - 1)}>← Back</button>
+          {step < 3 ? <button className="button primary" onClick={() => setStep(step + 1)}>{steps[step + 1]} <span>→</span></button> : step === 3 ? isComplete ? <button className="button primary" onClick={() => setStep(4)}>Code this idea <span>→</span></button> : <span className="finish-hint">Answer correctly to continue</span> : codePassed && next ? <a className="button primary" href={`#/lesson/${next.slug}`}>Next lesson <span>→</span></a> : codePassed ? <a className="button primary" href="#/certificate">Claim certificate <span>→</span></a> : <span className="finish-hint">Pass the tests to master</span>}
         </div>
       </section>
     </main>
@@ -271,25 +295,42 @@ function PracticePage({ progress }: { progress: ProgressState }) {
   </div>
 }
 
+type ProjectDraft = { step: number; answer: number | null; checked: boolean }
+function projectDraftKey(slug: string) { return `ml-quest-project-draft-v1:${slug}` }
+export function readProjectDraft(project: Capstone): ProjectDraft {
+  const empty = { step: 0, answer: null, checked: false }
+  try {
+    const saved = JSON.parse(localStorage.getItem(projectDraftKey(project.slug)) || 'null')
+    if (!saved || !Number.isInteger(saved.step) || saved.step < 0 || saved.step >= project.decisions.length) return empty
+    const answer = Number.isInteger(saved.answer) && saved.answer >= 0 && saved.answer < project.decisions[saved.step].options.length ? saved.answer : null
+    return { step: saved.step, answer, checked: answer !== null && saved.checked === true }
+  } catch { return empty }
+}
+
 function ProjectsPage({ progress }: { progress: ProgressState }) {
   return <div className="inner-page"><PageHeader progress={progress} eyebrow="Hero track · applied judgment" title="Build the plan before the pipeline." lede="Three guided capstones put you in the decisions that make or break a real ML system. Each one ends with a complete, defensible project brief."/>
     <section className="projects-shell">
       <div className="projects-progress"><div><strong>{progress.capstones.length}/3</strong><span>capstones complete</span></div><div><strong>{progress.capstones.length * 500}</strong><span>project XP</span></div><p>Choose any project. There is no code to hide behind—only the product, data, evaluation, and operational decisions that make a model useful.</p></div>
-      <div className="project-grid">{CAPSTONES.map(project => { const complete = progress.capstones.includes(project.slug); return <a key={project.slug} href={`#/project/${project.slug}`} className="project-card" style={{ '--project': project.accent } as React.CSSProperties}><div><span>{project.number}</span><b>{complete ? '✓ Complete' : project.eyebrow}</b></div><h2>{project.title}</h2><p>{project.brief}</p><small>Deliverable</small><strong>{project.deliverable}</strong><footer><span>5 decisions · 500 XP</span><b>{complete ? 'Review plan' : 'Start project'} →</b></footer></a> })}</div>
+      <div className="project-grid">{CAPSTONES.map(project => { const complete = progress.capstones.includes(project.slug); const draft = readProjectDraft(project); const started = draft.step > 0 || draft.answer !== null; return <a key={project.slug} href={`#/project/${project.slug}`} className="project-card" style={{ '--project': project.accent } as React.CSSProperties}><div><span>{project.number}</span><b>{complete ? '✓ Complete' : project.eyebrow}</b></div><h2>{project.title}</h2><p>{project.brief}</p><small>Deliverable</small><strong>{project.deliverable}</strong><footer><span>{started && !complete ? `Decision ${draft.step + 1} of 5` : '5 decisions · 500 XP'}</span><b>{complete ? 'Review plan' : started ? 'Resume project' : 'Start project'} →</b></footer></a> })}</div>
     </section>
     <footer className="footer"><Brand dark/><div><b>3 applied capstones</b><span>from model to system</span></div><p>Good ML begins with good decisions.</p></footer>
   </div>
 }
 
 function ProjectPage({ project, progress, onComplete }: { project: Capstone; progress: ProgressState; onComplete: (slug: string) => void }) {
-  const [step, setStep] = useState(0)
-  const [answer, setAnswer] = useState<number | null>(null)
-  const [checked, setChecked] = useState(false)
+  const alreadyComplete = progress.capstones.includes(project.slug)
+  const [draft, setDraft] = useState<ProjectDraft>(() => alreadyComplete ? { step: 0, answer: null, checked: false } : readProjectDraft(project))
+  const { step, answer, checked } = draft
+  const [saved, setSaved] = useState(true)
+  useEffect(() => {
+    if (alreadyComplete) return
+    try { localStorage.setItem(projectDraftKey(project.slug), JSON.stringify(draft)); setSaved(true) }
+    catch { setSaved(false) }
+  }, [draft, project.slug, alreadyComplete])
   const decision = project.decisions[step]
   const correct = checked && answer === decision.correct
-  const alreadyComplete = progress.capstones.includes(project.slug)
-  const next = () => { setStep(current => current + 1); setAnswer(null); setChecked(false) }
-  const finish = () => { onComplete(project.slug); window.location.hash = '#/projects' }
+  const next = () => setDraft({ step: step + 1, answer: null, checked: false })
+  const finish = () => { try { localStorage.removeItem(projectDraftKey(project.slug)) } catch { /* completion still works */ }; onComplete(project.slug); window.location.hash = '#/projects' }
   return <div className="project-page" style={{ '--project': project.accent } as React.CSSProperties}>
     <TopNav progress={progress} dark/>
     <main className="project-workspace">
@@ -297,9 +338,10 @@ function ProjectPage({ project, progress, onComplete }: { project: Capstone; pro
       <section className="decision-panel">
         <div className="decision-progress"><span>Decision {step + 1} of {project.decisions.length}</span><i><b style={{ width: `${(step + Number(correct)) / project.decisions.length * 100}%` }}/></i><em>{decision.skill}</em></div>
         <div className="decision-copy"><p className="lesson-kicker">{decision.title}</p><h2>{decision.context}</h2><p>{decision.question}</p></div>
-        <div className="decision-options" role="radiogroup" aria-label="Project decisions">{decision.options.map((option, index) => { const selected = answer === index; const state = checked ? index === decision.correct ? 'correct' : selected ? 'wrong' : '' : selected ? 'selected' : ''; return <button key={option} className={state} role="radio" aria-checked={selected} onClick={() => { setAnswer(index); setChecked(false) }}><span>{String.fromCharCode(65 + index)}</span><b>{option}</b>{checked && index === decision.correct && <i>✓</i>}</button> })}</div>
+        <div className="decision-options" role="radiogroup" aria-label="Project decisions">{decision.options.map((option, index) => { const selected = answer === index; const state = checked ? index === decision.correct ? 'correct' : selected ? 'wrong' : '' : selected ? 'selected' : ''; return <button key={option} className={state} role="radio" aria-checked={selected} onClick={() => setDraft({ step, answer: index, checked: false })}><span>{String.fromCharCode(65 + index)}</span><b>{option}</b>{checked && index === decision.correct && <i>✓</i>}</button> })}</div>
         {checked && <div className={`decision-feedback ${correct ? 'correct' : 'wrong'}`}><b>{correct ? 'Sound decision.' : 'Reconsider the tradeoff.'}</b><p>{decision.explanation}</p></div>}
-        <div className="decision-actions"><a className="button ghost" href="#/projects">Save & exit</a>{!checked || !correct ? <button className="button primary" disabled={answer === null} onClick={() => setChecked(true)}>Check decision <span>→</span></button> : step < project.decisions.length - 1 ? <button className="button primary" onClick={next}>Next decision <span>→</span></button> : <button className="button primary" onClick={finish}>{alreadyComplete ? 'Return to projects' : 'Complete · +500 XP'} <span>→</span></button>}</div>
+        <p className="draft-status" role="status">{alreadyComplete ? 'Review mode · this project is already complete.' : saved ? 'Your place and current answer are saved on this device.' : 'Device storage is unavailable. Your place will be lost if you leave.'}</p>
+        <div className="decision-actions"><a className="button ghost" href="#/projects">{saved ? 'Save & exit' : 'Exit project'}</a>{!checked || !correct ? <button className="button primary" disabled={answer === null} onClick={() => setDraft({ ...draft, checked: true })}>Check decision <span>→</span></button> : step < project.decisions.length - 1 ? <button className="button primary" onClick={next}>Next decision <span>→</span></button> : <button className="button primary" onClick={finish}>{alreadyComplete ? 'Return to projects' : 'Complete · +500 XP'} <span>→</span></button>}</div>
       </section>
     </main>
   </div>
@@ -413,6 +455,8 @@ export function App() {
     if (!window.confirm('Reset all course, project, and review progress? Saved code drafts will remain.')) return
     localStorage.removeItem(STORAGE_KEY)
     localStorage.removeItem(LEGACY_KEY)
+    localStorage.removeItem(BOOKMARK_KEY)
+    CAPSTONES.forEach(project => localStorage.removeItem(projectDraftKey(project.slug)))
     setProgress({ lessons: [], code: [], activeDates: [], capstones: [], review: {} })
   }
 
@@ -424,7 +468,7 @@ export function App() {
   if (route.page === 'projects') return <ProjectsPage progress={progress}/>
   if (route.page === 'project') {
     const project = getCapstone(route.slug)
-    if (project) return <ProjectPage project={project} progress={progress} onComplete={completeCapstone}/>
+    if (project) return <ProjectPage key={project.slug} project={project} progress={progress} onComplete={completeCapstone}/>
   }
   if (route.page === 'review') return <ReviewPage progress={progress} onAnswer={recordReview}/>
   if (route.page === 'playground') return <div className="inner-page playground-page"><TopNav progress={progress}/><Playground/><footer className="footer"><Brand dark/><div><b>Your data stays local</b><span>zero uploads, real evidence</span></div><p>From dataset to portfolio brief.</p></footer></div>

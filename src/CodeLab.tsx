@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CodeChallenge } from './codeChallenges'
 import { runChallenge, type RunResult } from './engine/pyodide'
 
@@ -14,6 +14,8 @@ function loadDraft(slug: string, starter: string, functionName: string) {
 }
 
 export function CodeLab({ slug, challenge, passed, onPass }: { slug: string; challenge: CodeChallenge; passed: boolean; onPass: () => void }) {
+  const passedRef = useRef(passed)
+  passedRef.current = passed
   const [code, setCode] = useState(() => loadDraft(slug, challenge.starter, challenge.functionName))
   const [runState, setRunState] = useState<RunState>(passed ? 'passed' : 'idle')
   const [result, setResult] = useState<RunResult | null>(null)
@@ -22,11 +24,13 @@ export function CodeLab({ slug, challenge, passed, onPass }: { slug: string; cha
 
   useEffect(() => {
     setCode(loadDraft(slug, challenge.starter, challenge.functionName))
-    setRunState(passed ? 'passed' : 'idle')
+    setRunState(passedRef.current ? 'passed' : 'idle')
     setResult(null)
     setAttempts(0)
     setRevealedHints(0)
-  }, [slug, challenge.starter, challenge.functionName, passed])
+    // A successful run flips `passed` in the parent. Do not treat that as a
+    // challenge change or the result panel and the learner's fresh code vanish.
+  }, [slug, challenge.starter, challenge.functionName])
 
   useEffect(() => {
     const timer = setTimeout(() => {
