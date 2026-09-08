@@ -5,6 +5,7 @@ import { CODE_CHALLENGES } from './codeChallenges'
 import { LESSONS, STAGES, TOTAL_MINUTES, getLesson, getStageForLesson, type Lesson } from './curriculum'
 import { InteractiveLab } from './Lab'
 import { Playground } from './Playground'
+import { ProjectStudio } from './ProjectStudio'
 import { FORMULAS, GLOSSARY, MODEL_CHOOSER } from './reference'
 
 const STORAGE_KEY = 'ml-quest-progress-v2'
@@ -17,13 +18,14 @@ interface ProgressState {
   code: string[]
   activeDates: string[]
   capstones: string[]
+  builds: string[]
   review: Record<string, { attempts: number; correct: number; lastReviewed: string }>
 }
 
 type Route =
   | { page: 'home'; anchor?: 'curriculum' | 'how-it-works' }
   | { page: 'lesson'; slug: string; initialStep?: number }
-  | { page: 'project'; slug: string }
+  | { page: 'project'; slug: string; initialBuild?: boolean }
   | { page: 'practice' | 'projects' | 'review' | 'playground' | 'reference' | 'certificate' }
 
 function todayKey(date = new Date()) {
@@ -33,10 +35,10 @@ function todayKey(date = new Date()) {
 function readProgress(): ProgressState {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null')
-    if (saved?.lessons && saved?.code) return { lessons: saved.lessons, code: saved.code, activeDates: saved.activeDates || [], capstones: saved.capstones || [], review: saved.review || {} }
+    if (saved?.lessons && saved?.code) return { lessons: saved.lessons, code: saved.code, activeDates: saved.activeDates || [], capstones: saved.capstones || [], builds: saved.builds || [], review: saved.review || {} }
     const legacy = JSON.parse(localStorage.getItem(LEGACY_KEY) || '[]')
-    return { lessons: Array.isArray(legacy) ? legacy : [], code: [], activeDates: [], capstones: [], review: {} }
-  } catch { return { lessons: [], code: [], activeDates: [], capstones: [], review: {} } }
+    return { lessons: Array.isArray(legacy) ? legacy : [], code: [], activeDates: [], capstones: [], builds: [], review: {} }
+  } catch { return { lessons: [], code: [], activeDates: [], capstones: [], builds: [], review: {} } }
 }
 
 function getStreak(activeDates: string[]) {
@@ -50,7 +52,7 @@ function getStreak(activeDates: string[]) {
 
 function getXP(progress: ProgressState) {
   const reviewXP = Object.values(progress.review).reduce((sum, item) => sum + item.correct * 10, 0)
-  return progress.lessons.length * 100 + progress.code.length * 150 + progress.capstones.length * 500 + reviewXP
+  return progress.lessons.length * 100 + progress.code.length * 150 + progress.capstones.length * 500 + progress.builds.length * 500 + reviewXP
 }
 
 const BOOKMARK_KEY = 'ml-quest-bookmark-v1'
@@ -80,7 +82,7 @@ function parseRoute(hash: string): Route {
     catch { return { page: 'home' } }
   }
   const project = hash.match(/^#\/project\/([^/]+)/)
-  if (project) return { page: 'project', slug: decodeURIComponent(project[1]) }
+  if (project) return { page: 'project', slug: decodeURIComponent(project[1]), initialBuild: hash.endsWith('/build') }
   if (hash.startsWith('#/practice')) return { page: 'practice' }
   if (hash.startsWith('#/projects')) return { page: 'projects' }
   if (hash.startsWith('#/review')) return { page: 'review' }
@@ -308,17 +310,18 @@ export function readProjectDraft(project: Capstone): ProjectDraft {
 }
 
 function ProjectsPage({ progress }: { progress: ProgressState }) {
-  return <div className="inner-page"><PageHeader progress={progress} eyebrow="Hero track · applied judgment" title="Build the plan before the pipeline." lede="Three guided capstones put you in the decisions that make or break a real ML system. Each one ends with a complete, defensible project brief."/>
+  return <div className="inner-page"><PageHeader progress={progress} eyebrow="Hero track · build studio" title="From a good decision to a working model." lede="Three end-to-end capstones: plan the system, train real Python models, evaluate held-out data, and export a tested standalone predictor."/>
     <section className="projects-shell">
-      <div className="projects-progress"><div><strong>{progress.capstones.length}/3</strong><span>capstones complete</span></div><div><strong>{progress.capstones.length * 500}</strong><span>project XP</span></div><p>Choose any project. There is no code to hide behind—only the product, data, evaluation, and operational decisions that make a model useful.</p></div>
-      <div className="project-grid">{CAPSTONES.map(project => { const complete = progress.capstones.includes(project.slug); const draft = readProjectDraft(project); const started = draft.step > 0 || draft.answer !== null; return <a key={project.slug} href={`#/project/${project.slug}`} className="project-card" style={{ '--project': project.accent } as React.CSSProperties}><div><span>{project.number}</span><b>{complete ? '✓ Complete' : project.eyebrow}</b></div><h2>{project.title}</h2><p>{project.brief}</p><small>Deliverable</small><strong>{project.deliverable}</strong><footer><span>{started && !complete ? `Decision ${draft.step + 1} of 5` : '5 decisions · 500 XP'}</span><b>{complete ? 'Review plan' : started ? 'Resume project' : 'Start project'} →</b></footer></a> })}</div>
+      <div className="projects-progress"><div><strong>{progress.builds.length}/3</strong><span>deployment-ready builds</span></div><div><strong>{(progress.capstones.length + progress.builds.length) * 500}</strong><span>project XP</span></div><p>Each project has five planning decisions (+500 XP), then a coding, evaluation, and deployment-readiness milestone (+500 XP). Existing plan completions and XP are preserved.</p></div>
+      <div className="project-grid">{CAPSTONES.map(project => { const complete = progress.builds.includes(project.slug); const planned = progress.capstones.includes(project.slug); const draft = readProjectDraft(project); const started = draft.step > 0 || draft.answer !== null; return <a key={project.slug} href={`#/project/${project.slug}${planned ? '/build' : ''}`} className="project-card" style={{ '--project': project.accent } as React.CSSProperties}><div><span>{project.number}</span><b>{complete ? '✓ Deployment-ready' : planned ? '✓ Plan complete · build next' : project.eyebrow}</b></div><h2>{project.title}</h2><p>{project.brief}</p><small>Deliverable</small><strong>Trained model + test report + portable predictor</strong><footer><span>{planned ? 'Python + evaluation + deployment' : started ? `Decision ${draft.step + 1} of 5` : '5 decisions · then build'}</span><b>{complete ? 'Open project' : planned ? 'Build model' : started ? 'Resume project' : 'Start project'} →</b></footer></a> })}</div>
     </section>
     <footer className="footer"><Brand dark/><div><b>3 applied capstones</b><span>from model to system</span></div><p>Good ML begins with good decisions.</p></footer>
   </div>
 }
 
-function ProjectPage({ project, progress, onComplete }: { project: Capstone; progress: ProgressState; onComplete: (slug: string) => void }) {
+function ProjectPage({ project, progress, onComplete, onBuild, initialBuild = false }: { project: Capstone; progress: ProgressState; onComplete: (slug: string) => void; onBuild: (slug: string) => void; initialBuild?: boolean }) {
   const alreadyComplete = progress.capstones.includes(project.slug)
+  const showBuild = initialBuild && alreadyComplete
   const [draft, setDraft] = useState<ProjectDraft>(() => alreadyComplete ? { step: 0, answer: null, checked: false } : readProjectDraft(project))
   const { step, answer, checked } = draft
   const [saved, setSaved] = useState(true)
@@ -330,20 +333,21 @@ function ProjectPage({ project, progress, onComplete }: { project: Capstone; pro
   const decision = project.decisions[step]
   const correct = checked && answer === decision.correct
   const next = () => setDraft({ step: step + 1, answer: null, checked: false })
-  const finish = () => { try { localStorage.removeItem(projectDraftKey(project.slug)) } catch { /* completion still works */ }; onComplete(project.slug); window.location.hash = '#/projects' }
+  const finish = () => { try { localStorage.removeItem(projectDraftKey(project.slug)) } catch { /* completion still works */ }; onComplete(project.slug); setDraft({ step: 0, answer: null, checked: false }); window.location.hash = `#/project/${project.slug}/build` }
   return <div className="project-page" style={{ '--project': project.accent } as React.CSSProperties}>
     <TopNav progress={progress} dark/>
-    <main className="project-workspace">
+    <div className="project-mode-tabs"><button aria-pressed={!showBuild} onClick={() => { window.location.hash = `#/project/${project.slug}` }}>01 · Plan the system{alreadyComplete ? ' ✓' : ''}</button><button disabled={!alreadyComplete} aria-pressed={showBuild} onClick={() => { window.location.hash = `#/project/${project.slug}/build` }}>02 · Build & deploy{progress.builds.includes(project.slug) ? ' ✓' : ''}</button></div>
+    {showBuild ? <ProjectStudio key={project.slug} slug={project.slug} completed={progress.builds.includes(project.slug)} onComplete={() => onBuild(project.slug)}/> : <main className="project-workspace">
       <aside className="project-brief"><a href="#/projects">← Capstone studio</a><p>{project.eyebrow}</p><h1>{project.title}</h1><div><span>Client brief</span><p>{project.brief}</p></div><div><span>Your deliverable</span><p>{project.deliverable}</p></div><ol>{project.decisions.map((item, index) => <li key={item.title} className={index === step ? 'current' : index < step || alreadyComplete ? 'done' : ''}><i>{index < step || alreadyComplete ? '✓' : index + 1}</i><span>{item.title}<small>{item.skill}</small></span></li>)}</ol></aside>
       <section className="decision-panel">
         <div className="decision-progress"><span>Decision {step + 1} of {project.decisions.length}</span><i><b style={{ width: `${(step + Number(correct)) / project.decisions.length * 100}%` }}/></i><em>{decision.skill}</em></div>
         <div className="decision-copy"><p className="lesson-kicker">{decision.title}</p><h2>{decision.context}</h2><p>{decision.question}</p></div>
         <div className="decision-options" role="radiogroup" aria-label="Project decisions">{decision.options.map((option, index) => { const selected = answer === index; const state = checked ? index === decision.correct ? 'correct' : selected ? 'wrong' : '' : selected ? 'selected' : ''; return <button key={option} className={state} role="radio" aria-checked={selected} onClick={() => setDraft({ step, answer: index, checked: false })}><span>{String.fromCharCode(65 + index)}</span><b>{option}</b>{checked && index === decision.correct && <i>✓</i>}</button> })}</div>
         {checked && <div className={`decision-feedback ${correct ? 'correct' : 'wrong'}`}><b>{correct ? 'Sound decision.' : 'Reconsider the tradeoff.'}</b><p>{decision.explanation}</p></div>}
-        <p className="draft-status" role="status">{alreadyComplete ? 'Review mode · this project is already complete.' : saved ? 'Your place and current answer are saved on this device.' : 'Device storage is unavailable. Your place will be lost if you leave.'}</p>
-        <div className="decision-actions"><a className="button ghost" href="#/projects">{saved ? 'Save & exit' : 'Exit project'}</a>{!checked || !correct ? <button className="button primary" disabled={answer === null} onClick={() => setDraft({ ...draft, checked: true })}>Check decision <span>→</span></button> : step < project.decisions.length - 1 ? <button className="button primary" onClick={next}>Next decision <span>→</span></button> : <button className="button primary" onClick={finish}>{alreadyComplete ? 'Return to projects' : 'Complete · +500 XP'} <span>→</span></button>}</div>
+        <p className="draft-status" role="status">{alreadyComplete ? 'Review mode · planning is complete. The build milestone is separate.' : saved ? 'Your place and current answer are saved on this device.' : 'Device storage is unavailable. Your place will be lost if you leave.'}</p>
+        <div className="decision-actions"><a className="button ghost" href="#/projects">{saved ? 'Save & exit' : 'Exit project'}</a>{!checked || !correct ? <button className="button primary" disabled={answer === null} onClick={() => setDraft({ ...draft, checked: true })}>Check decision <span>→</span></button> : step < project.decisions.length - 1 ? <button className="button primary" onClick={next}>Next decision <span>→</span></button> : <button className="button primary" onClick={finish}>{alreadyComplete ? 'Continue to build' : 'Finish plan · +500 XP'} <span>→</span></button>}</div>
       </section>
-    </main>
+    </main>}
   </div>
 }
 
@@ -419,7 +423,7 @@ function CertificatePage({ progress }: { progress: ProgressState }) {
     <section className="certificate-shell">
       {!unlocked ? <div className="certificate-locked"><ProgressRing value={mastery}/><h2>{mastery}/{TOTAL_CHECKS} checks complete</h2><p>Finish {COURSE_SIZE - progress.lessons.length} concept checkpoints and {COURSE_SIZE - progress.code.length} Python quests.</p><div><a className="button primary" href="#/curriculum">Continue course →</a><a className="button ghost" href="#/practice">Open practice track</a></div></div> : <>
         <label className="name-field">Name on certificate<input value={name} onChange={event => setName(event.target.value)} placeholder="Your name"/></label>
-        <article className="certificate" aria-label="ML Quest certificate of mastery"><div className="cert-top"><Brand/><span>Credential · {credentialCode(name || 'learner')}</span></div><p>Certificate of mastery</p><h2>{name.trim() || 'Your name'}</h2><p>completed the full</p><h3>Machine Learning<br/>Zero-to-Hero Quest</h3><div className="cert-metrics"><span><b>{COURSE_SIZE}</b> concepts</span><span><b>{COURSE_SIZE}</b> Python quests</span><span><b>{getXP(progress)}</b> XP</span></div><footer><span>{new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</span><b>{progress.capstones.length ? `${progress.capstones.length} capstone${progress.capstones.length === 1 ? '' : 's'} · ` : ''}bankoti.github.io/ml-quest</b></footer></article>
+        <article className="certificate" aria-label="ML Quest certificate of mastery"><div className="cert-top"><Brand/><span>Credential · {credentialCode(name || 'learner')}</span></div><p>Certificate of mastery</p><h2>{name.trim() || 'Your name'}</h2><p>completed the full</p><h3>Machine Learning<br/>Zero-to-Hero Quest</h3><div className="cert-metrics"><span><b>{COURSE_SIZE}</b> concepts</span><span><b>{COURSE_SIZE}</b> Python quests</span><span><b>{getXP(progress)}</b> XP</span></div><footer><span>{new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</span><b>{progress.builds.length ? `${progress.builds.length} deployment-ready builds · ` : progress.capstones.length ? `${progress.capstones.length} project plans · ` : ''}bankoti.github.io/ml-quest</b></footer></article>
         <button className="button primary print-button" disabled={!name.trim()} onClick={() => window.print()}>Print / save certificate <span>→</span></button>
       </>}
     </section>
@@ -430,36 +434,41 @@ function CertificatePage({ progress }: { progress: ProgressState }) {
 export function App() {
   const route = useRoute()
   const [storedProgress, setProgress] = useState<ProgressState>(readProgress)
-  const progress: ProgressState = { ...storedProgress, capstones: storedProgress.capstones || [], review: storedProgress.review || {} }
+  const [storageUnavailable, setStorageUnavailable] = useState(false)
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(storedProgress)); setStorageUnavailable(false) }
+    catch { setStorageUnavailable(true) }
+  }, [storedProgress])
+  const progress: ProgressState = { ...storedProgress, capstones: storedProgress.capstones || [], builds: storedProgress.builds || [], review: storedProgress.review || {} }
   const update = (field: 'lessons' | 'code', slug: string) => setProgress(current => {
     if (current[field].includes(slug)) return current
     const next = { ...current, [field]: [...current[field], slug], activeDates: Array.from(new Set([...current.activeDates, todayKey()])) }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
     return next
   })
-  const completeCapstone = (slug: string) => setProgress(current => {
-    const completed = current.capstones || []
+  const completeCapstone = (slug: string, field: 'capstones' | 'builds' = 'capstones') => setProgress(current => {
+    const completed = current[field] || []
     if (completed.includes(slug)) return current
-    const next = { ...current, capstones: [...completed, slug], activeDates: Array.from(new Set([...current.activeDates, todayKey()])) }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+    const next = { ...current, [field]: [...completed, slug], activeDates: Array.from(new Set([...current.activeDates, todayKey()])) }
     return next
   })
   const recordReview = (slug: string, correct: boolean) => setProgress(current => {
     const review = current.review || {}
     const previous = review[slug] || { attempts: 0, correct: 0, lastReviewed: '' }
     const next = { ...current, review: { ...review, [slug]: { attempts: previous.attempts + 1, correct: previous.correct + Number(correct), lastReviewed: new Date().toISOString() } }, activeDates: Array.from(new Set([...current.activeDates, todayKey()])) }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
     return next
   })
   const reset = () => {
     if (!window.confirm('Reset all course, project, and review progress? Saved code drafts will remain.')) return
-    localStorage.removeItem(STORAGE_KEY)
-    localStorage.removeItem(LEGACY_KEY)
-    localStorage.removeItem(BOOKMARK_KEY)
-    CAPSTONES.forEach(project => localStorage.removeItem(projectDraftKey(project.slug)))
-    setProgress({ lessons: [], code: [], activeDates: [], capstones: [], review: {} })
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(LEGACY_KEY)
+      localStorage.removeItem(BOOKMARK_KEY)
+      CAPSTONES.forEach(project => localStorage.removeItem(projectDraftKey(project.slug)))
+    } catch { setStorageUnavailable(true) }
+    setProgress({ lessons: [], code: [], activeDates: [], capstones: [], builds: [], review: {} })
   }
 
+  const renderPage = () => {
   if (route.page === 'lesson') {
     const lesson = getLesson(route.slug)
     if (lesson) return <LessonPage lesson={lesson} progress={progress} initialStep={route.initialStep} onLessonComplete={slug => update('lessons', slug)} onCodePass={slug => update('code', slug)}/>
@@ -468,11 +477,13 @@ export function App() {
   if (route.page === 'projects') return <ProjectsPage progress={progress}/>
   if (route.page === 'project') {
     const project = getCapstone(route.slug)
-    if (project) return <ProjectPage key={project.slug} project={project} progress={progress} onComplete={completeCapstone}/>
+    if (project) return <ProjectPage key={project.slug} project={project} progress={progress} onComplete={completeCapstone} onBuild={slug => completeCapstone(slug, 'builds')} initialBuild={route.initialBuild}/>
   }
   if (route.page === 'review') return <ReviewPage progress={progress} onAnswer={recordReview}/>
   if (route.page === 'playground') return <div className="inner-page playground-page"><TopNav progress={progress}/><Playground/><footer className="footer"><Brand dark/><div><b>Your data stays local</b><span>zero uploads, real evidence</span></div><p>From dataset to portfolio brief.</p></footer></div>
   if (route.page === 'reference') return <ReferencePage progress={progress}/>
   if (route.page === 'certificate') return <CertificatePage progress={progress}/>
   return <Home progress={progress} reset={reset}/>
+  }
+  return <>{storageUnavailable && <p className="progress-storage-warning" role="alert">Device storage is unavailable. You can keep learning, but new progress will be lost when you leave. Download project files before closing.</p>}{renderPage()}</>
 }

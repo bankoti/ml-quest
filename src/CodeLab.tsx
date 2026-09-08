@@ -21,35 +21,40 @@ export function CodeLab({ slug, challenge, passed, onPass }: { slug: string; cha
   const [result, setResult] = useState<RunResult | null>(null)
   const [attempts, setAttempts] = useState(0)
   const [revealedHints, setRevealedHints] = useState(0)
+  const revision = useRef(0)
+  const controller = useRef<AbortController | null>(null)
 
   useEffect(() => {
+    revision.current++
+    controller.current?.abort()
     setCode(loadDraft(slug, challenge.starter, challenge.functionName))
     setRunState(passedRef.current ? 'passed' : 'idle')
     setResult(null)
     setAttempts(0)
     setRevealedHints(0)
+    return () => { revision.current++; controller.current?.abort() }
     // A successful run flips `passed` in the parent. Do not treat that as a
     // challenge change or the result panel and the learner's fresh code vanish.
   }, [slug, challenge.starter, challenge.functionName])
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      try { localStorage.setItem(draftKey(slug), code) } catch { /* local drafts are best effort */ }
-    }, 350)
-    return () => clearTimeout(timer)
+    try { localStorage.setItem(draftKey(slug), code) } catch { /* local drafts are best effort */ }
   }, [code, slug])
 
   const run = useCallback(async () => {
     if (runState === 'loading' || runState === 'running') return
+    const token = ++revision.current
+    controller.current = new AbortController()
     setRunState(attempts === 0 ? 'loading' : 'running')
     setResult(null)
     setAttempts(value => value + 1)
     let next: RunResult
     try {
-      next = await runChallenge(code, challenge.tests)
+      next = await runChallenge(code, challenge.tests, false, controller.current.signal)
     } catch (error) {
       next = { ok: false, output: '', error: `Python could not start: ${String(error)}. Check your connection and try again.`, durationMs: 0 }
     }
+    if (token !== revision.current) return
     setResult(next)
     setRunState(next.ok ? 'passed' : 'failed')
     if (next.ok) onPass()
@@ -65,6 +70,7 @@ export function CodeLab({ slug, challenge, passed, onPass }: { slug: string; cha
 
   const reset = () => {
     if (code !== challenge.starter && !window.confirm('Discard your code and restore the starter?')) return
+    revision.current++; controller.current?.abort()
     try { localStorage.removeItem(draftKey(slug)) } catch { /* no-op */ }
     setCode(challenge.starter)
     setResult(null)
@@ -86,7 +92,7 @@ export function CodeLab({ slug, challenge, passed, onPass }: { slug: string; cha
       <div className="editor-chrome"><span><i/><i/><i/></span><b>solution.py</b><em>Python · browser</em></div>
       <div className="editor-body">
         <pre aria-hidden="true">{Array.from({ length: lines }, (_, index) => index + 1).join('\n')}</pre>
-        <textarea value={code} onChange={event => setCode(event.target.value)} spellCheck={false} aria-label={`Code for ${challenge.title}`} />
+        <textarea value={code} onChange={event => { revision.current++; controller.current?.abort(); setCode(event.target.value); setResult(null); setRunState('idle') }} spellCheck={false} aria-label={`Code for ${challenge.title}`} />
       </div>
     </div>
 
@@ -95,6 +101,7 @@ export function CodeLab({ slug, challenge, passed, onPass }: { slug: string; cha
         <span>{runState === 'loading' || runState === 'running' ? '↻' : '▶'}</span>
         {runState === 'loading' ? 'Loading Python…' : runState === 'running' ? 'Running tests…' : 'Run tests'}
       </button>
+      {(runState === 'loading' || runState === 'running') && <button className="reset-code" onClick={() => controller.current?.abort()}>Stop run</button>}
       <button className="reset-code" onClick={reset} disabled={code === challenge.starter}>↺ Reset</button>
       <span className="shortcut">⌘/Ctrl + Enter</span>
     </div>
