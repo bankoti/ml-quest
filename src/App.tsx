@@ -140,7 +140,7 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
   const nextHref = resumeHref(progress)
   const mastery = progress.lessons.length + progress.code.length
   const streak = getStreak(progress.activeDates)
-  const hasProgress = mastery > 0 || progress.capstones.length > 0 || Object.keys(progress.review).length > 0
+  const hasProgress = mastery > 0 || progress.capstones.length > 0 || progress.builds.length > 0 || Object.keys(progress.review).length > 0
   return <div className="site-shell">
     <TopNav progress={progress}/>
     <main>
@@ -148,7 +148,7 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
         <div className="hero-copy">
           <p className="eyebrow"><span>●</span> A complete zero-to-hero learning path</p>
           <h1>Teach machines to <em>see the pattern.</em></h1>
-          <p className="hero-lede">Learn machine learning through visual experiments and real Python. Build intuition, practice core algorithms, and learn how to evaluate and plan an ML system.</p>
+          <p className="hero-lede">Learn machine learning through visual experiments and real Python. Build intuition, practice core algorithms, then train, evaluate, and export working ML projects.</p>
           <div className="hero-actions">
             <a className="button primary" href={nextHref}>{mastery ? 'Continue your quest' : 'Start learning'} <span>→</span></a>
             <a className="text-action" href="#/curriculum">Explore the full course ↓</a>
@@ -182,7 +182,7 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
       <section className="hero-track">
         <div className="hero-track-heading"><p className="section-kicker">Hero track</p><h2>Turn knowledge into judgment.</h2><p>The hard part of applied ML is not calling a model. It is making defensible decisions around it.</p></div>
         <div className="hero-track-grid">
-          <a href="#/projects" className="hero-track-card projects-card"><span>Applied capstones · {progress.capstones.length}/3</span><h3>Ship three systems on paper before you ship one for real.</h3><p>Frame the outcome, choose the evaluation, set the decision policy, and plan for failure.</p><b>Open capstone studio →</b></a>
+          <a href="#/projects" className="hero-track-card projects-card"><span>Deployment-ready builds · {progress.builds.length}/3</span><h3>Turn three good plans into working predictors.</h3><p>Train real Python models, test held-out data, and export a portable predictor with the evidence behind it.</p><b>Open capstone studio →</b></a>
           <a href="#/playground" className="hero-track-card playground-card"><span>Dataset lab · private by design</span><h3>Fit a real model and make it beat the baseline.</h3><p>Bring a numeric CSV or use a built-in dataset. Split, train, evaluate, visualize, and export the evidence.</p><b>Open data playground →</b></a>
           <a href="#/review" className="hero-track-card review-card"><span>Adaptive recall · {Object.values(progress.review).reduce((sum, item) => sum + item.attempts, 0)} answers</span><h3>Practice the concept your memory needs next.</h3><p>A focused ten-question session prioritizes missed and untouched ideas, then explains every answer.</p><b>Start a review session →</b></a>
         </div>
