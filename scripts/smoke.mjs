@@ -240,9 +240,21 @@ async function runComponentSmoke() {
         window.localStorage.setItem(`ml-quest-build-v1:${spec.slug}`, JSON.stringify({ code: solution }))
       }
       await withMountedDom(React.createElement(App), async (container, remount) => {
+        getByRole(container, 'main', { name: 'Capstone implementation studio' })
+        getByRole(container, 'heading', { level: 1, name: spec.title })
+        assert.match(getByRole(container, 'status').textContent, /Code draft saved.*No current passing evaluation/)
         assert.ok(getByRole(container, 'button', { name: /Finish build/ }).disabled)
+        await setRoute('#/')
+        assert.match(container.querySelector('.projects-card').textContent, /Deployment-ready builds · 0\/3/)
+        await setRoute(`#/project/${spec.slug}/build`)
         await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Train & evaluate/ })))
         getByText(container, 'Evaluation passed')
+        assert.match(getByRole(container, 'status').textContent, /Code and successful evaluation saved/)
+        if (spec.slug === 'catch-fraud') assert.match(container.querySelector('.evaluation-report').textContent, /threshold is chosen on validation under a review-capacity limit/)
+        if (spec.slug === 'keep-churn-healthy') {
+          assert.match(container.querySelector('.evaluation-report').textContent, /fixed 0.5 threshold/)
+          assert.doesNotMatch(container.querySelector('.evaluation-report').textContent, /review-capacity limit/)
+        }
         assert.ok(getByRole(container, 'button', { name: /Download project kit/ }).disabled)
         await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Launch portable predictor/ })))
         const frame = container.querySelector('iframe'), nonce = JSON.parse(frame.getAttribute('srcdoc').match(/, nonce=("[^"]*");/)[1])
@@ -263,8 +275,10 @@ async function runComponentSmoke() {
         const editor = getByRole(container, 'textbox', { name: `Project code for ${spec.title}` })
         await act(async () => fireEvent.input(editor, { target: { value: `${solution}\n# my edit` } }))
         assert.equal(container.querySelector('.evaluation-report'), null, 'Editing invalidates evaluated artifacts')
+        assert.match(getByRole(container, 'status').textContent, /No current passing evaluation/)
         const savedDraft = localStorage.getItem(`ml-quest-build-v1:${spec.slug}`)
         await setRoute('#/'); window.confirm = () => true
+        assert.match(container.querySelector('.projects-card').textContent, /Deployment-ready builds · 1\/3/)
         await act(async () => fireEvent.click(getByRole(container, 'button', { name: 'Reset progress' })))
         assert.equal(localStorage.getItem(`ml-quest-build-v1:${spec.slug}`), savedDraft, 'Progress reset preserves project code')
       }, seed)
@@ -288,10 +302,12 @@ async function runComponentSmoke() {
     globalThis.__mlqProjectRunner = realProjectRun
     await withMountedDom(React.createElement(App), async container => {
       getByRole(container, 'alert')
+      assert.match(getByRole(container, 'status').textContent, /Copy your editor code to a local file/)
       await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Train & evaluate/ })))
       await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Launch portable predictor/ })))
       const frame = container.querySelector('iframe'), nonce = JSON.parse(frame.getAttribute('srcdoc').match(/, nonce=("[^"]*");/)[1])
       await act(async () => window.dispatchEvent(new window.MessageEvent('message', { source: frame.contentWindow, data: { type: 'mlq-predictor-ready', nonce, predictions: staleResult.artifact.vectors.map(v => v.prediction) } })))
+      assert.match(getByRole(container, 'status').textContent, /Download your kit before leaving/)
       await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Finish build/ })))
       getByRole(container, 'button', { name: /Build milestone earned/ })
       getByRole(container, 'alert')
