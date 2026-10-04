@@ -39,13 +39,13 @@ Start at `#/starter` if Python is new, then use `#/map` for the guided core path
 
 The map is not a claim that every ML specialization has been implemented. Reinforcement learning, semi/self-supervised learning, transfer learning, generative modeling, and probabilistic graphical models are marked **not yet taught**. Architectures, training objectives, and applications overlap; they are not mutually exclusive branches of one taxonomy.
 
-The certificate retains its original 54 core checks (27 concepts + 27 Python quests). Beginner completions and drafts use separate `ml-quest-beginner-*-v1` storage; experiment predictions/reflections use `ml-quest-experiment-guide-v1:<lesson>`. They award no core XP and cannot overwrite core progress. Resetting core progress preserves beginner completion, saved code, and notebook reflections. Each beginner editor offers an inline-confirmed reset of that editor only. No account or cloud synchronization is added.
+The certificate retains its original 54 core checks (27 concepts + 27 Python quests). Beginner completions and drafts use [separate storage](src/BeginnerTrack.tsx); [experiment predictions/reflections](src/ExperimentGuide.tsx) are saved per lesson. They award no core XP and cannot overwrite core progress. Resetting core progress preserves beginner completion, all saved code drafts, and notebook predictions/reflections. Each beginner editor offers an inline-confirmed reset of that editor only. All progress and artifacts are device-local; there is no account or cloud synchronization.
 
 ## Capstone contract and progress
 
 Each project has 90 training, 30 validation, and 30 test examples in chronological order. Training-only preprocessing is serialized with model weights. House-price intervals use validation residuals; fraud thresholds use validation cost/capacity; churn candidate selection uses validation log loss. Final test metrics report the frozen model and policy. Repeated learning attempts are not a pristine scientific holdout.
 
-Existing `progress.capstones` entries remain completed **plans** with their original 500 XP. New `progress.builds` milestones earn a separate 500 XP only after Python checks and a sandboxed, source/nonce-verified static predictor smoke check. Resetting mastery preserves lesson and project code drafts. All progress and artifacts are device-local; there is no account sync.
+Existing `progress.capstones` entries remain completed **plans** with their original 500 XP. New `progress.builds` milestones earn a separate 500 XP only after Python checks and a sandboxed, source/nonce-verified static predictor smoke check. See [Learning path and coverage](#learning-path-and-coverage) for storage and reset behavior.
 
 “Deployment-ready” means the exported JavaScript predictor runs and matches Python. It does **not** mean a learner’s separate project has been published. Each kit includes explicit GitHub Pages publishing and rollback instructions; the course itself is publicly hosted below.
 
