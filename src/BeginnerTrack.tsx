@@ -37,8 +37,10 @@ export function BeginnerTrack({ initialSlug }: { initialSlug?: string }) {
   const unknownSlug = Boolean(initialSlug && initialSlug !== unit.slug)
   const index = BEGINNER_UNITS.indexOf(unit)
   const complete = (slug: string) => {
-    const next = Array.from(new Set([...completed, slug]))
+    const persisted = loadProgress()
+    const next = Array.from(new Set([...persisted.completed, ...completed, slug]))
     setCompleted(next)
+    if (persisted.warning) setStorageWarning(true)
     try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(next)) }
     catch { setStorageWarning(true) }
     window.dispatchEvent(new Event('ml-quest-beginner-progress'))

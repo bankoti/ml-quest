@@ -21,7 +21,7 @@ export async function runBeginnerCases() {
   for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { value, configurable: true, writable: true })
   const pending = []
   globalThis.__beginnerRunner = (code, tests, signal) => new Promise(resolve => pending.push({ code, tests, signal, resolve }))
-  let root
+  let root, secondRoot
   try {
     const [{ BEGINNER_UNITS }, { BeginnerTrack, readBeginnerProgress }, { createRoot }] = await Promise.all([server.ssrLoadModule('/src/beginnerContent.ts'), server.ssrLoadModule('/src/BeginnerTrack.tsx'), import('react-dom/client')])
     assert.equal(BEGINNER_UNITS.length, 6)
@@ -116,19 +116,80 @@ export async function runBeginnerCases() {
     assert.doesNotMatch(container.textContent, /NaN|Infinity/)
 
     await unmountContent()
+    localStorage.clear()
+    const secondContainer = document.createElement('div')
+    document.body.appendChild(secondContainer)
+    secondRoot = createRoot(secondContainer)
+    await render(BEGINNER_UNITS[0].slug)
+    await act(async () => secondRoot.render(React.createElement(BeginnerTrack, { initialSlug: BEGINNER_UNITS[1].slug })))
+    await edit(BEGINNER_UNITS[0].solution)
+    const firstTabRun = await run()
+    await act(async () => fireEvent.input(getByRole(secondContainer, 'textbox'), { target: { value: BEGINNER_UNITS[1].solution } }))
+    await act(async () => fireEvent.click(getByRole(secondContainer, 'button', { name: 'Run my code & checks' })))
+    const secondTabRun = pending.at(-1)
+    await resolve(firstTabRun, true)
+    assert.deepEqual(readBeginnerProgress(), [BEGINNER_UNITS[0].slug])
+    assert.ok(getByText(secondContainer, '0 / 6 foundations complete'), 'The second tab still has its original completion snapshot')
+    await resolve(secondTabRun, true)
+    assert.deepEqual(readBeginnerProgress(), BEGINNER_UNITS.slice(0, 2).map(unit => unit.slug), 'An already-open tab must preserve the other tab’s earned completion')
+    assert.ok(getByText(secondContainer, '2 / 6 foundations complete'))
+    await resolve(await run(), true)
+    assert.deepEqual(readBeginnerProgress(), BEGINNER_UNITS.slice(0, 2).map(unit => unit.slug), 'Repeating a completion in the first tab must also retain both units')
+    await act(async () => secondRoot.unmount())
+    secondRoot = null
+    secondContainer.remove()
+
+    await unmountContent()
+    localStorage.clear()
+    const progressKey = 'ml-quest-beginner-progress-v1'
     const storagePrototype = Object.getPrototypeOf(dom.window.localStorage)
     const originalGet = storagePrototype.getItem, originalSet = storagePrototype.setItem
-    storagePrototype.getItem = () => { throw new Error('blocked') }
-    storagePrototype.setItem = () => { throw new Error('blocked') }
-    await render(BEGINNER_UNITS[0].slug)
-    assert.ok(getByRole(container, 'alert'))
-    await edit(BEGINNER_UNITS[0].solution)
-    await resolve(await run(), true)
-    assert.ok(getByText(container, '✓ Completed once'))
-    assert.ok(getByRole(container, 'alert'))
-    storagePrototype.getItem = originalGet; storagePrototype.setItem = originalSet
-    console.log('Beginner checks passed: six real Python exercises, drafts, routing, reset, cancel/stale isolation, visuals, completion, and storage failure.')
+    try {
+      storagePrototype.setItem = () => { throw new Error('full') }
+      await render(BEGINNER_UNITS[0].slug)
+      await edit(BEGINNER_UNITS[0].solution)
+      await resolve(await run(), true)
+      assert.equal(localStorage.getItem(progressKey), null)
+      assert.ok(getByText(container, '✓ Completed once'))
+      assert.ok(getByRole(container, 'alert'))
+      storagePrototype.setItem = originalSet
+      localStorage.setItem(progressKey, JSON.stringify([BEGINNER_UNITS[2].slug, BEGINNER_UNITS[2].slug, 'unknown-foundation', 7]))
+      await render(BEGINNER_UNITS[1].slug)
+      await edit(BEGINNER_UNITS[1].solution)
+      await resolve(await run(), true)
+      const earned = BEGINNER_UNITS.slice(0, 3).map(unit => unit.slug)
+      assert.deepEqual(readBeginnerProgress(), earned, 'A later pass merges unsaved in-memory completions with valid current persisted completions')
+      assert.deepEqual(JSON.parse(localStorage.getItem(progressKey)).sort(), [...earned].sort(), 'Merged storage contains only unique valid completions')
+      assert.ok(getByText(container, '3 / 6 foundations complete'))
+
+      await unmountContent()
+      localStorage.clear()
+      await render(BEGINNER_UNITS[0].slug)
+      await edit(BEGINNER_UNITS[0].solution)
+      assert.equal(queryByRole(container, 'alert'), null)
+      storagePrototype.getItem = () => { throw new Error('blocked') }
+      await resolve(await run(), true)
+      assert.ok(getByText(container, '✓ Completed once'))
+      assert.ok(getByRole(container, 'alert'), 'A progress read failure at completion must warn the learner')
+
+      await unmountContent()
+      storagePrototype.setItem = () => { throw new Error('blocked') }
+      await render(BEGINNER_UNITS[0].slug)
+      assert.ok(getByRole(container, 'alert'))
+      await edit(BEGINNER_UNITS[0].solution)
+      await resolve(await run(), true)
+      assert.ok(getByText(container, '✓ Completed once'))
+      await render(BEGINNER_UNITS[1].slug)
+      await edit(BEGINNER_UNITS[1].solution)
+      await resolve(await run(), true)
+      assert.ok(getByText(container, '2 / 6 foundations complete'), 'Storage failure preserves all in-memory earned completions')
+      assert.ok(getByRole(container, 'alert'))
+    } finally {
+      storagePrototype.getItem = originalGet; storagePrototype.setItem = originalSet
+    }
+    console.log('Beginner checks passed: six real Python exercises, drafts, routing, reset, cancel/stale isolation, visuals, cross-tab completion, and storage failure.')
   } finally {
+    if (secondRoot) await act(async () => secondRoot.unmount())
     if (root) await act(async () => root.unmount())
     delete globalThis.__beginnerRunner
     for (const [key, descriptor] of previous) {
