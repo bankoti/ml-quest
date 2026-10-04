@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "npm run build && node scripts/smoke.mjs && node scripts/computed-smoke.mjs && node scripts/beginner-cases.mjs && node scripts/experiment-cases.mjs && node scripts/learning-map-cases.mjs"
+    "test": "npm run build && node scripts/smoke.mjs && node scripts/computed-smoke.mjs && npm run test:learning-flow",
+    "test:learning-flow": "node scripts/beginner-cases.mjs && node scripts/experiment-cases.mjs && node scripts/learning-map-cases.mjs && node scripts/model-comparison-cases.mjs && node scripts/learning-flow-cases.mjs"
   },
   "dependencies": {
     "react": "19.2.6",
