@@ -160,7 +160,7 @@ export function LearningMap({ completedLessons, completedCode, starterCompleted 
       </div>
       <article className="map-starter-card">
         <span className="map-stage-number" aria-hidden="true">00</span>
-        <div><p className="map-eyebrow">Before the core · beginner preparation</p><h3>Python and math, without the mystery.</h3><p>Practice the small building blocks the labs use: values, lists, functions, averages, and model notation.</p><span className="map-starter-status">{starterCount ? `${starterCount} / ${BEGINNER_UNITS.length} foundations completed` : 'No programming experience assumed'}</span></div>
+        <div><p className="map-eyebrow">Before the core · beginner preparation</p><h3>Python and math, without the mystery.</h3><p>Practice the small building blocks the labs use: values, lists, functions, weighted sums, and model notation.</p><span className="map-starter-status">{starterCount ? `${starterCount} / ${BEGINNER_UNITS.length} foundations completed` : 'No programming experience assumed'}</span></div>
         <a className="button ghost" href="#/starter">Open beginner preparation <span aria-hidden="true">→</span></a>
       </article>
       <ol className="map-stages">
