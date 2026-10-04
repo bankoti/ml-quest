@@ -65,7 +65,7 @@ async function runComponentSmoke() {
         name: 'ml-quest-pyodide-smoke-stub',
         enforce: 'pre',
         resolveId(source, importer) {
-          if (source === './engine/pyodide' && (importer?.endsWith('/src/CodeLab.tsx') || importer?.endsWith('/src/ProjectStudio.tsx'))) return pyodideStubId
+          if (source === './engine/pyodide' && (importer?.endsWith('/src/CodeLab.tsx') || importer?.endsWith('/src/ProjectStudio.tsx') || importer?.endsWith('/src/BeginnerTrack.tsx'))) return pyodideStubId
           return null
         },
         load(id) {
@@ -279,7 +279,11 @@ async function runComponentSmoke() {
         const savedDraft = localStorage.getItem(`ml-quest-build-v1:${spec.slug}`)
         await setRoute('#/'); window.confirm = () => true
         assert.match(container.querySelector('.projects-card').textContent, /Deployment-ready builds · 1\/3/)
+        localStorage.setItem('ml-quest-beginner-progress-v1', '["variables-and-arithmetic"]')
+        localStorage.setItem('ml-quest-experiment-guide-v1:linear-regression', '{"reflection":"My saved observation"}')
         await act(async () => fireEvent.click(getByRole(container, 'button', { name: 'Reset progress' })))
+        assert.equal(localStorage.getItem('ml-quest-beginner-progress-v1'), '["variables-and-arithmetic"]', 'Core reset preserves independent beginner completion')
+        assert.equal(localStorage.getItem('ml-quest-experiment-guide-v1:linear-regression'), '{"reflection":"My saved observation"}', 'Core reset preserves formative notes')
         assert.equal(localStorage.getItem(`ml-quest-build-v1:${spec.slug}`), savedDraft, 'Progress reset preserves project code')
       }, seed)
     }
@@ -318,6 +322,60 @@ async function runComponentSmoke() {
       window.Storage.prototype.setItem = () => { throw new Error('Quota exceeded') }
     })
     delete globalThis.__mlqProjectRunner
+
+    const { ModelComparison, compareModels } = await server.ssrLoadModule('/src/ModelComparison.tsx')
+    for (const shape of ['linear', 'curved']) for (let noiseStep = 0; noiseStep <= 10; noiseStep++) for (let penaltyStep = 0; penaltyStep <= 50; penaltyStep++) {
+      const noise = noiseStep / 10, penalty = penaltyStep / 10
+      const experiment = compareModels(shape, noise, penalty)
+      assert.equal(experiment.train.length, 20); assert.equal(experiment.validation.length, 10)
+      assert.equal(new Set([...experiment.train, ...experiment.validation].map(r => r.id)).size, 30)
+      for (const model of experiment.models) {
+        const error = rows => rows.reduce((sum, r) => sum + (r.y - model.predict(r.x)) ** 2, 0) / rows.length
+        assert.ok(Math.abs(error(experiment.train) - model.trainMSE) < 1e-8)
+        assert.ok(Math.abs(error(experiment.validation) - model.validationMSE) < 1e-8)
+        assert.ok(model.curve.every(p => Number.isFinite(p.y) && p.y >= experiment.yMin && p.y <= experiment.yMax))
+      }
+      const average = experiment.train.reduce((sum, r) => sum + r.y, 0) / experiment.train.length
+      assert.ok(Math.abs(experiment.models[0].predict(10) - average) < 1e-8, 'Baseline uses training mean only')
+      if (noise === 0) assert.ok(experiment.models[shape === 'linear' ? 1 : 2].validationMSE < 1e-10)
+    }
+    await withMountedDom(React.createElement(ModelComparison), async container => {
+      const commit = getByRole(container, 'button', { name: /Commit prediction/ })
+      assert.ok(commit.disabled)
+      assert.equal(container.querySelector('.comparison-results'), null)
+      await act(async () => fireEvent.click(getByRole(container, 'radio', { name: 'Linear regression', exact: true })))
+      await act(async () => fireEvent.click(commit))
+      assert.equal(container.querySelectorAll('.comparison-grid article').length, 4)
+      assert.match(getByRole(container, 'status').textContent, /You predicted Linear regression/)
+      await act(async () => fireEvent.change(getByRole(container, 'combobox', { name: 'Underlying relationship' }), { target: { value: 'linear' } }))
+      assert.equal(container.querySelector('.comparison-results'), null, 'Settings change invalidates the old comparison prediction')
+      assert.ok(getByRole(container, 'button', { name: /Commit prediction/ }).disabled)
+    })
+
+    await withMountedDom(React.createElement(App), async container => {
+      assert.equal(getByRole(container, 'link', { name: /Start from zero/ }).getAttribute('href'), '#/starter')
+      await setRoute('#/map')
+      getByRole(container, 'main')
+      for (const link of container.querySelectorAll('a[href^="#/lesson/"]')) {
+        const slug = link.getAttribute('href').split('/')[2]
+        assert.ok(LESSONS.some(lesson => lesson.slug === slug), `Map link must resolve: ${slug}`)
+      }
+      assert.equal(JSON.parse(localStorage.getItem('ml-quest-progress-v2')).lessons.length, 0)
+      await setRoute('#/compare')
+      getByRole(container, 'combobox', { name: 'Underlying relationship' })
+    })
+
+    const { BEGINNER_UNITS } = await server.ssrLoadModule('/src/beginnerContent.ts')
+    for (const finished of [1, BEGINNER_UNITS.length]) {
+      await withMountedDom(React.createElement(App), async container => {
+        const link = getByRole(container, 'link', { name: finished === 1 ? /Continue foundations/ : /Start learning/ })
+        assert.equal(link.getAttribute('href'), finished === 1 ? `#/starter/${BEGINNER_UNITS[1].slug}` : '#/lesson/machines-that-learn')
+        await setRoute('#/starter')
+        getByRole(container, 'main')
+        assert.equal(container.querySelectorAll('[aria-label="ML Quest home"]').length, 1, 'Starter owns one header, not nested navigation')
+        assert.equal(JSON.parse(localStorage.getItem('ml-quest-progress-v2')).lessons.length, 0, 'Starter completion does not earn core mastery')
+      }, window => window.localStorage.setItem('ml-quest-beginner-progress-v1', JSON.stringify(BEGINNER_UNITS.slice(0, finished).map(unit => unit.slug))))
+    }
 
     const challenge = {
       title: 'Persistence smoke quest',

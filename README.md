@@ -4,11 +4,15 @@ An interactive, zero-to-hero machine learning course. Learn by changing live mod
 
 ## Course
 
+- Six beginner foundations: variables, lists, conditions, loops, functions, and visual math, each with a traced example, prediction, interactive graphic, and executable Python exercise
+- A guided learning map showing prerequisites, separate concept/Python progress, and honest coverage labels for core lessons, introductions, and specializations not yet taught
 - 27 visual lessons across six stages
 - 27 graded Python quests running fully in the browser
 - Dedicated interactive animations for linear regression, logistic regression, KNN, SVM, decision trees, random forests, boosting, and neural networks
 - Computed experiments in every lesson: fitted CART/bootstrapped forests, ridge regression, cross-validation, Lloyd’s K-means, PCA, MAD anomaly scores, item-based recommendations, XOR backpropagation, convolution, causal softmax attention, and distribution monitoring
 - Concept checkpoints with immediate explanations
+- Lesson-specific predict–experiment–explain notebooks for all 27 lessons, with saved reflections and transfer questions (not automatically graded)
+- A model-comparison lab: constant, linear, quadratic, and ridge fits on identical training/validation splits, common plot scales, real error metrics, and an explicit warning against treating repeated validation as a final test
 - Dedicated practice track and searchable ML field guide
 - Three end-to-end capstones: planning, real Python training, held-out evaluation, and standalone deployment-readiness checks
 - Downloadable project kits containing training code, executable tests, versioned synthetic data, fitted model, metrics, self-contained predictor HTML, rebuild script, and publishing instructions
@@ -27,7 +31,15 @@ npm run dev
 
 Run `npm test` for a production build plus smoke checks covering course inventory, interactive labs, Python quests, the playground, and social preview metadata.
 
-The behavior checks exercise every lab, mathematical invariants at all 101 slider positions, lesson resume, separate plan/build completion, draft preservation, stale preview-message rejection, real Python reference solutions and rejected starters, ZIP round trips, exported HTML prediction parity, model rebuilding, and worker cancellation/timeouts. Tiny deterministic synthetic datasets are teaching tools, not real-world benchmarks. The Data lab also supports independent CSV experiments.
+The behavior checks exercise every lab, mathematical invariants at all 101 slider positions, lesson resume, separate plan/build completion, beginner and experiment-notebook persistence, comparison-fit metrics, draft preservation, stale preview-message rejection, real Python reference solutions and rejected starters, ZIP round trips, exported HTML prediction parity, model rebuilding, and worker cancellation/timeouts. Tiny deterministic synthetic datasets are teaching tools, not real-world benchmarks. The Data lab also supports independent CSV experiments.
+
+## Learning path and coverage
+
+Start at `#/starter` if Python is new, then use `#/map` for the guided core path. The beginner track is optional and never locks existing lessons. In each core lesson, predict before touching the controls, follow the investigation, explain the result, then complete the concept and Python checks. Use `#/compare` to contrast models and the capstones to apply what you learned.
+
+The map is not a claim that every ML specialization has been implemented. Reinforcement learning, semi/self-supervised learning, transfer learning, generative modeling, and probabilistic graphical models are marked **not yet taught**. Architectures, training objectives, and applications overlap; they are not mutually exclusive branches of one taxonomy.
+
+The certificate retains its original 54 core checks (27 concepts + 27 Python quests). Beginner completions and drafts use separate `ml-quest-beginner-*-v1` storage; experiment predictions/reflections use `ml-quest-experiment-guide-v1:<lesson>`. They award no core XP and cannot overwrite core progress. Resetting core progress preserves beginner completion, saved code, and notebook reflections. Each beginner editor offers an inline-confirmed reset of that editor only. No account or cloud synchronization is added.
 
 ## Capstone contract and progress
 

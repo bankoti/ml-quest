@@ -1,0 +1,59 @@
+.experiment-guide {
+  min-width: 0;
+  margin-block: 22px;
+  border: 1px solid var(--line, #c9cec4);
+  background: #f9f8f2;
+  color: var(--ink, #14211c);
+  overflow-wrap: anywhere;
+}
+.experiment-guide-heading { padding: 22px 22px 0; }
+.experiment-guide .experiment-guide-kicker,
+.experiment-guide .experiment-guide-step {
+  display: block;
+  margin: 0 0 12px;
+  color: var(--green, #0b7a57);
+  text-transform: uppercase;
+  letter-spacing: .055em;
+  font: 750 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.experiment-guide .experiment-guide-heading h3 { margin: 0 0 12px; font: 500 28px/1.14 Georgia, "Times New Roman", serif; letter-spacing: -.025em; }
+.experiment-guide p { margin: 0 0 14px; font-size: 14px; line-height: 1.65; }
+.experiment-guide > .experiment-guide-note { padding: 0 22px 16px; margin: 0; }
+.experiment-guide .experiment-guide-note { color: #56645c; font-size: 12px; line-height: 1.6; }
+.experiment-guide-phase { min-width: 0; padding: 20px 22px; border-top: 1px solid var(--line, #c9cec4); }
+.experiment-guide-prediction { min-width: 0; margin: 0 0 15px; padding: 0; border: 0; }
+.experiment-guide-prediction legend { width: 100%; padding: 0; margin-bottom: 13px; font-size: 15px; font-weight: 750; line-height: 1.6; }
+.experiment-guide-prediction label { min-width: 0; min-height: 46px; display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: start; gap: 10px; margin-top: 8px; padding: 12px; border: 1px solid #bbc5bd; background: #fffefa; cursor: pointer; font-size: 13px; line-height: 1.55; }
+.experiment-guide-prediction label.selected { border-color: var(--green, #0b7a57); background: #e7f2e7; }
+.experiment-guide-prediction input { width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--green, #0b7a57); }
+.experiment-guide-prediction:disabled label { cursor: default; }
+.experiment-guide .experiment-guide-button { display: inline-flex; min-height: 44px; max-width: 100%; align-items: center; justify-content: center; padding: 10px 15px; border: 1px solid var(--green, #0b7a57); border-radius: 3px; background: var(--green, #0b7a57); color: white; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 750; line-height: 1.5; text-align: center; white-space: normal; }
+.experiment-guide .experiment-guide-button.secondary { background: #f9f8f2; color: var(--green, #0b7a57); }
+.experiment-guide .experiment-guide-button:hover:not(:disabled) { background: #075f44; color: white; }
+.experiment-guide .experiment-guide-button:disabled { cursor: not-allowed; opacity: .5; }
+.experiment-guide-commit { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; line-height: 1.6; }
+.experiment-guide .experiment-guide-link { min-height: 44px; padding: 5px 0; border: 0; background: transparent; color: var(--green, #0b7a57); font-size: 12px; font-weight: 750; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.experiment-guide .experiment-guide-tasks { margin: 0; padding: 0 0 0 21px; }
+.experiment-guide .experiment-guide-tasks li { margin: 0 0 12px; padding-left: 5px; font-size: 14px; line-height: 1.65; }
+.experiment-guide .experiment-guide-tasks li:last-child { margin-bottom: 0; }
+.experiment-guide .experiment-guide-tasks li::marker { color: var(--green, #0b7a57); font-weight: 800; }
+.experiment-guide-reflection { display: block; margin: 0 0 12px; font-size: 14px; line-height: 1.65; }
+.experiment-guide textarea { display: block; width: 100%; min-width: 0; min-height: 120px; resize: vertical; padding: 12px; border: 1px solid #a9b6ab; border-radius: 2px; background: #fffefa; color: var(--ink, #14211c); font: inherit; font-size: 14px; line-height: 1.6; }
+.experiment-guide textarea::placeholder { color: #68756b; }
+.experiment-guide .experiment-guide-storage { margin: 9px 0 16px; font-size: 11px; line-height: 1.6; color: #56645c; }
+.experiment-guide > .experiment-guide-storage { padding: 0 22px; }
+.experiment-guide-explanation { min-width: 0; margin-top: 15px; padding: 16px; border-left: 3px solid var(--green, #0b7a57); background: #e8f0e3; }
+.experiment-guide-explanation > strong { display: block; margin-bottom: 10px; font-size: 14px; line-height: 1.5; }
+.experiment-guide-explanation p:last-child { margin-bottom: 0; }
+.experiment-guide-transfer { background: #f0eddf; }
+.experiment-guide-transfer summary { min-height: 44px; padding: 9px 0; color: var(--green, #0b7a57); cursor: pointer; font-size: 13px; font-weight: 750; line-height: 1.6; }
+.experiment-guide-transfer details p { margin: 9px 0 0; }
+@media (max-width: 600px) {
+  .experiment-guide-heading { padding: 18px 15px 0; }
+  .experiment-guide > .experiment-guide-note { padding: 0 15px 15px; }
+  .experiment-guide-phase { padding: 18px 15px; }
+  .experiment-guide .experiment-guide-heading h3 { font-size: 25px; }
+  .experiment-guide .experiment-guide-button { width: 100%; }
+  .experiment-guide textarea { font-size: 16px; }
+  .experiment-guide-explanation { padding: 13px; }
+}
