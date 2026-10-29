@@ -115,12 +115,84 @@ try {
   const context = { exports: {}, Worker: FakeWorker, performance, window: { setTimeout: (fn, ms) => { timers.set(++serial, { fn, ms }); return serial }, clearTimeout: id => timers.delete(id) } }
   vm.runInNewContext(compiled, context)
   const run = context.exports.runChallenge, abort = new AbortController(), promise = run('one', 'assert True', false, abort.signal)
+  assert.deepEqual(Array.from(workers[0].data.packages), [], 'Existing core jobs must not request optional packages')
   workers[0].onmessage({ data: { ready: true } }); assert.equal([...timers.values()][0].ms, 20000)
   abort.abort(); assert.equal((await promise).ok, false); assert.ok(workers[0].terminated)
+  workers[0].onmessage({ data: { ready: true } }); workers[0].onmessage({ data: { ok: true, output: 'stale' } })
+  assert.equal(timers.size, 0, 'Late ready after cancellation must not restart a timer')
   const a = run('a', ''), b = run('b', '')
   workers[1].onmessage({ data: { ok: true, output: 'a' } }); workers[2].onmessage({ data: { ok: true, output: 'b' } })
   assert.equal((await a).output, 'a'); assert.equal((await b).output, 'b')
   const timeout = run('while True: pass', ''); workers[3].onmessage({ data: { ready: true } }); [...timers.values()][0].fn()
   assert.match((await timeout).error, /20 seconds/); assert.ok(workers[3].terminated); assert.equal(timers.size, 0)
-  console.log('PASS: 101-position computed-model invariants, three real Python builds, eight-file ZIP exports, portable predictor execution, and worker isolation/cancellation/timeouts.')
+
+  const sqlAbort = new AbortController(), sqlLoading = run('sql', 'import sqlite3', false, sqlAbort.signal, ['sqlite3', 'sqlite3'])
+  const sqlWorker = workers.at(-1)
+  assert.deepEqual(Array.from(sqlWorker.data.packages), ['sqlite3'], 'Forward an explicit deduplicated package list')
+  assert.equal([...timers.values()][0].ms, 90000, 'Optional package download belongs to the loading budget')
+  sqlAbort.abort(); assert.match((await sqlLoading).error, /cancelled/); assert.ok(sqlWorker.terminated)
+  sqlWorker.onmessage({ data: { ready: true } }); assert.equal(timers.size, 0)
+  const loadTimeout = run('sql', 'import sqlite3', false, undefined, ['sqlite3']), loadWorker = workers.at(-1)
+  assert.equal([...timers.values()][0].ms, 90000); [...timers.values()][0].fn()
+  assert.match((await loadTimeout).error, /download timed out/); assert.ok(loadWorker.terminated)
+  const packageFailure = run('sql', 'import sqlite3', false, undefined, ['sqlite3'])
+  workers.at(-1).onmessage({ data: { ok: false, output: '', error: 'SQLite download failed' } })
+  assert.match((await packageFailure).error, /SQLite download failed/); assert.equal(timers.size, 0)
+  const workerCount = workers.length
+  assert.match((await run('', '', false, undefined, ['https://untrusted.test/package.whl'])).error, /Unsupported Python package/)
+  assert.equal(workers.length, workerCount, 'Reject unsupported package requests before starting a worker')
+
+  // This VM tests our worker protocol with a deliberately fake Pyodide object.
+  // It does NOT verify real WASM execution, SQLite compatibility, or CDN access.
+  const workerSource = await readFile('public/python-worker.js', 'utf8')
+  function workerProtocol({ packageError, runtimeError, holdPackage = false } = {}) {
+    const events = [], messages = [], globals = new Map()
+    let releasePackage
+    const packageGate = new Promise(resolve => { releasePackage = resolve })
+    const workerContext = {
+      self: { postMessage(message) { messages.push(message); events.push(message.ready ? 'ready' : 'result') } },
+      importScripts(url) { assert.equal(url, 'https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js'); events.push('import') },
+      async loadPyodide({ indexURL }) {
+        assert.equal(indexURL, 'https://cdn.jsdelivr.net/pyodide/v0.26.2/full/'); events.push('runtime')
+        if (runtimeError) throw new Error(runtimeError)
+        return {
+          globals: { set: (name, value) => globals.set(name, value) },
+          async loadPackage(name) {
+            assert.equal(name, 'sqlite3'); events.push('package-start')
+            if (holdPackage) await packageGate
+            if (packageError) throw new Error(packageError)
+            events.push('package-done')
+          },
+          async runPythonAsync(code) {
+            assert.match(code, /exec\(_mlq_source, _namespace\)/)
+            assert.equal(globals.get('_mlq_source'), 'learner source')
+            assert.equal(globals.get('_mlq_tests'), 'test source')
+            events.push('execute')
+            return JSON.stringify({ ok: true, output: 'protocol stub only', artifact: null })
+          },
+        }
+      },
+    }
+    vm.runInNewContext(workerSource, workerContext)
+    return { events, messages, releasePackage, start: packages => workerContext.self.onmessage({ data: { userCode: 'learner source', tests: 'test source', project: false, ...(packages === undefined ? {} : { packages }) } }) }
+  }
+  const coreProtocol = workerProtocol(); await coreProtocol.start()
+  assert.deepEqual(coreProtocol.events, ['import', 'runtime', 'ready', 'execute', 'result'], 'Core jobs require no extra package download')
+  const sqlProtocol = workerProtocol({ holdPackage: true }), pendingSql = sqlProtocol.start(['sqlite3', 'sqlite3'])
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(sqlProtocol.events, ['import', 'runtime', 'package-start'])
+  assert.equal(sqlProtocol.messages.length, 0, 'Do not signal ready or run Python before package loading completes')
+  sqlProtocol.releasePackage(); await pendingSql
+  assert.deepEqual(sqlProtocol.events, ['import', 'runtime', 'package-start', 'package-done', 'ready', 'execute', 'result'])
+  for (const failure of [{ packageError: 'SQLite CDN failed' }, { runtimeError: 'Runtime CDN failed' }]) {
+    const protocol = workerProtocol(failure); await protocol.start(['sqlite3'])
+    assert.equal(protocol.messages.length, 1); assert.equal(protocol.messages[0].ok, false)
+    assert.match(protocol.messages[0].error, /CDN failed/)
+    assert.ok(!protocol.events.includes('ready') && !protocol.events.includes('execute'), 'Loading failure must not masquerade as learner-code failure or start execution')
+  }
+  for (const invalid of [['numpy'], ['https://untrusted.test/package.whl'], 'sqlite3', null]) {
+    const protocol = workerProtocol(); await protocol.start(invalid)
+    assert.deepEqual(protocol.events, ['result']); assert.match(protocol.messages[0].error, /Unsupported Python package/)
+  }
+  console.log('PASS: 101-position computed-model invariants, three real Python builds, eight-file ZIP exports, portable predictor execution, worker isolation/cancellation/timeouts, and optional-SQLite loading protocol (stubbed, not a real WASM runtime check).')
 } finally { await server.close() }

@@ -139,7 +139,7 @@ try {
   await follow(getByRole(container, 'link', { name: /Open data playground/ }))
   await click(getByRole(container, 'button', { name: /Run honest experiment/ }))
   getByRole(container, 'img', { name: 'price_k by area_sqft with fitted model' })
-  getByRole(container, 'heading', { name: 'The model earned its complexity.' })
+  getByRole(container, 'heading', { name: 'The model beats this baseline here.' })
 
   await navigate('#/')
   const kept = storage()

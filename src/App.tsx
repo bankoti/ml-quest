@@ -12,6 +12,7 @@ import { BEGINNER_UNITS } from './beginnerContent'
 import { LearningMap, LessonMapContext } from './LearningMap'
 import { ExperimentGuide } from './ExperimentGuide'
 import { ModelComparison } from './ModelComparison'
+import { InterviewCourse } from './InterviewCourse'
 
 const STORAGE_KEY = 'ml-quest-progress-v2'
 const LEGACY_KEY = 'ml-quest-progress-v1'
@@ -32,6 +33,7 @@ type Route =
   | { page: 'lesson'; slug: string; initialStep?: number }
   | { page: 'project'; slug: string; initialBuild?: boolean }
   | { page: 'starter'; slug?: string }
+  | { page: 'interview'; section?: string }
   | { page: 'practice' | 'projects' | 'review' | 'playground' | 'reference' | 'certificate' | 'map' | 'compare' }
 
 function todayKey(date = new Date()) {
@@ -82,6 +84,11 @@ export function resumeHref(progress: Pick<ProgressState, 'lessons' | 'code'>) {
 }
 
 function parseRoute(hash: string): Route {
+  const interview = hash.match(/^#\/interview(?:\/([^/]+))?$/)
+  if (interview) {
+    try { return { page: 'interview', section: interview[1] ? decodeURIComponent(interview[1]) : undefined } }
+    catch { return { page: 'interview' } }
+  }
   const starter = hash.match(/^#\/starter(?:\/([^/]+))?$/)
   if (starter) {
     try { return { page: 'starter', slug: starter[1] ? decodeURIComponent(starter[1]) : undefined } }
@@ -132,7 +139,7 @@ function Brand({ dark = false }: { dark?: boolean }) {
 
 function TopNav({ progress, dark = false }: { progress: ProgressState; dark?: boolean }) {
   const total = progress.lessons.length + progress.code.length
-  const destinations = [['Learning map', 'map'], ['Course', 'curriculum'], ['Practice', 'practice'], ['Compare', 'compare'], ['Projects', 'projects'], ['Data lab', 'playground'], ['Review', 'review'], ['Reference', 'reference']]
+  const destinations = [['Interview sprint', 'interview'], ['Learning map', 'map'], ['Course', 'curriculum'], ['Practice', 'practice'], ['Compare', 'compare'], ['Projects', 'projects'], ['Data lab', 'playground'], ['Review', 'review'], ['Reference', 'reference']]
   const links = destinations.map(([label, path]) => <a key={path} href={`#/${path}`}>{label}</a>)
   return <nav className={`site-nav ${dark ? 'nav-dark' : ''}`} aria-label="Main navigation">
     <Brand dark={dark}/>
@@ -180,6 +187,8 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
       </header>
 
       <section className="promise-strip" aria-label="Course learning loop"><span>observe</span><i>→</i><span>experiment</span><i>→</i><span>code</span><i>→</i><strong>master</strong></section>
+
+      <section className="interview-entry" aria-label="Interview refresher"><div><p className="section-kicker">Already know the basics? · 7 days × 6 hours</p><h2>Demand forecasting.<br/>Inventory decisions. Research judgment.</h2><p>A focused interview refresher with deeper explanations, worked mathematics, Python and SQL trials, computed labs, and timed mock cases.</p></div><a className="button primary" href="#/interview">Open interview sprint →</a></section>
 
       <section className="learning-entry" aria-label="Choose your starting point">
         <a href="#/starter"><span>New to programming?</span><h2>Start with the building blocks.</h2><p>Six gentle Python and visual-math units. No installation, and no assumed coding experience.</p><b>Open beginner track →</b></a>
@@ -308,7 +317,7 @@ function PageHeader({ progress, eyebrow, title, lede }: { progress: ProgressStat
 function PracticePage({ progress }: { progress: ProgressState }) {
   const [filter, setFilter] = useState<'all' | 'todo' | 'done'>('all')
   const codeSet = useMemo(() => new Set(progress.code), [progress.code])
-  return <div className="inner-page"><PageHeader progress={progress} eyebrow="Practice track · real Python" title="Make the model from scratch." lede={`${COURSE_SIZE} focused exercises turn every visual intuition into working code. Python runs entirely in your browser; your drafts save automatically.`}/>
+  return <div className="inner-page"><PageHeader progress={progress} eyebrow="Practice track · real Python" title="Build the pieces of a model." lede={`${COURSE_SIZE} focused component drills turn visual intuition into working code. These are warmups, not complete algorithm implementations. Python runs entirely in your browser; your drafts save automatically.`}/>
     <section className="practice-summary"><div><strong>{progress.code.length * 150}</strong><span>coding XP</span></div><div><strong>{progress.code.length}/{COURSE_SIZE}</strong><span>quests solved</span></div><div><strong>{getStreak(progress.activeDates)}</strong><span>day streak</span></div><ProgressRing value={progress.code.length} total={COURSE_SIZE}/></section>
     <section className="practice-list"><div className="filter-bar"><span>Challenge library</span><div>{(['all','todo','done'] as const).map(value => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value}</button>)}</div></div>
       {STAGES.map(stage => {
@@ -493,6 +502,7 @@ export function App() {
   }
 
   const renderPage = () => {
+  if (route.page === 'interview') return <div className="inner-page"><TopNav progress={progress}/><InterviewCourse key={route.section ?? 'overview'} section={route.section}/></div>
   if (route.page === 'starter') return <BeginnerTrack initialSlug={route.slug}/>
   if (route.page === 'map') return <div className="inner-page"><TopNav progress={progress}/><LearningMap completedLessons={progress.lessons} completedCode={progress.code} starterCompleted={readBeginnerProgress()}/></div>
   if (route.page === 'compare') return <div className="inner-page"><TopNav progress={progress}/><ModelComparison/></div>

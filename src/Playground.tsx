@@ -100,10 +100,10 @@ export function runExperiment(rows: NumericRow[], feature: string, target: strin
     return {
       task, trainCount: train.length, testCount: test.length, modelLabel: `ŷ = ${formatMetric(intercept)} + ${formatMetric(slope)}x`, primaryName: 'MAE', primary: mae, baseline,
       metrics: [
-        { label: 'Test MAE', value: formatMetric(mae, 1), note: 'Typical absolute miss' },
+        { label: 'Validation MAE', value: formatMetric(mae, 1), note: 'Typical absolute miss' },
         { label: 'Baseline MAE', value: formatMetric(baseline, 1), note: 'Predict the train mean' },
-        { label: 'Test RMSE', value: formatMetric(rmse, 1), note: 'Punishes large misses' },
-        { label: 'Test R²', value: formatMetric(r2), note: 'Variance explained' },
+        { label: 'Validation RMSE', value: formatMetric(rmse, 1), note: 'Punishes large misses' },
+        { label: 'Validation R²', value: formatMetric(r2), note: 'Relative to held-out mean; zero convention for constant targets' },
       ],
       points: [...train.map(row => ({ x: row[feature], y: row[target], prediction: predict(row[feature]), split: 'train' as const })), ...test.map(row => ({ x: row[feature], y: row[target], prediction: predict(row[feature]), split: 'test' as const }))],
       line: { start: predict(minX), end: predict(maxX) },
@@ -128,7 +128,7 @@ export function runExperiment(rows: NumericRow[], feature: string, target: strin
   return {
     task, trainCount: train.length, testCount: test.length, modelLabel: `Predict 1 when x ${best.direction === 1 ? '≥' : '≤'} ${formatMetric(best.threshold)}`, primaryName: 'F1', primary: metrics.f1, baseline: baselineMetrics.f1,
     metrics: [
-      { label: 'Test F1', value: formatMetric(metrics.f1), note: 'Precision–recall balance' },
+      { label: 'Validation F1', value: formatMetric(metrics.f1), note: 'Precision–recall balance' },
       { label: 'Baseline F1', value: formatMetric(baselineMetrics.f1), note: 'Predict the majority' },
       { label: 'Precision', value: formatMetric(metrics.precision), note: 'Trust in positive alerts' },
       { label: 'Recall', value: formatMetric(metrics.recall), note: 'Positive cases found' },
@@ -167,7 +167,7 @@ function Plot({ result, feature, target }: { result: ExperimentResult; feature: 
   const minX = Math.min(...xValues); const maxX = Math.max(...xValues); const minY = Math.min(...yValues); const maxY = Math.max(...yValues)
   const x = (value: number) => 8 + (value - minX) / Math.max(maxX - minX, 1) * 84
   const y = (value: number) => 88 - (value - minY) / Math.max(maxY - minY, 1) * 76
-  return <div className="playground-plot"><div className="plot-title"><span>{target} ↑</span><b>{result.modelLabel}</b></div><svg viewBox="0 0 100 100" role="img" aria-label={`${target} by ${feature} with fitted model`} preserveAspectRatio="none"><line className="plot-axis" x1="7" y1="89" x2="94" y2="89"/><line className="plot-axis" x1="7" y1="8" x2="7" y2="89"/>{result.line && <line className="fit-line" x1={x(minX)} y1={y(result.line.start)} x2={x(maxX)} y2={y(result.line.end)}/>} {result.threshold !== undefined && <line className="fit-line threshold" x1={x(result.threshold)} y1="8" x2={x(result.threshold)} y2="89"/>}{result.points.map((point, index) => <circle key={index} className={`${point.split} class-${point.y > 0 ? 1 : 0}`} cx={x(point.x)} cy={y(point.y)} r={point.split === 'test' ? 2.2 : 1.55}/>)}</svg><div className="plot-legend"><span><i className="train"/> train</span><span><i className="test"/> hidden test</span><b>{feature} →</b></div></div>
+  return <div className="playground-plot"><div className="plot-title"><span>{target} ↑</span><b>{result.modelLabel}</b></div><svg viewBox="0 0 100 100" role="img" aria-label={`${target} by ${feature} with fitted model`} preserveAspectRatio="none"><line className="plot-axis" x1="7" y1="89" x2="94" y2="89"/><line className="plot-axis" x1="7" y1="8" x2="7" y2="89"/>{result.line && <line className="fit-line" x1={x(minX)} y1={y(result.line.start)} x2={x(maxX)} y2={y(result.line.end)}/>} {result.threshold !== undefined && <line className="fit-line threshold" x1={x(result.threshold)} y1="8" x2={x(result.threshold)} y2="89"/>}{result.points.map((point, index) => <circle key={index} className={`${point.split} class-${point.y > 0 ? 1 : 0}`} cx={x(point.x)} cy={y(point.y)} r={point.split === 'test' ? 2.2 : 1.55}/>)}</svg><div className="plot-legend"><span><i className="train"/> train</span><span><i className="test"/> validation</span><b>{feature} →</b></div></div>
 }
 
 export function Playground() {
@@ -196,12 +196,12 @@ export function Playground() {
   const downloadBrief = () => {
     if (!result) return
     const direction = result.task === 'regression' ? (result.primary < result.baseline ? 'beat' : 'did not beat') : (result.primary > result.baseline ? 'beat' : 'did not beat')
-    const markdown = `# ML Quest Experiment Brief\n\n## Question\nCan **${feature}** help predict **${target}** in the **${dataset.name}** dataset?\n\n## Data\n- ${validRows.length} usable rows\n- ${result.trainCount} training rows / ${result.testCount} hidden test rows\n- Task: ${task}\n\n## Model\nA transparent one-feature ${task === 'regression' ? 'linear regression' : 'threshold classifier'}: \`${result.modelLabel}\`\n\n## Result\n- ${result.primaryName}: ${formatMetric(result.primary)}\n- Baseline ${result.primaryName}: ${formatMetric(result.baseline)}\n- The model ${direction} the simple baseline on the hidden test set.\n${result.metrics.map(metric => `- ${metric.label}: ${metric.value}`).join('\n')}\n\n## Risks and next steps\n- Validate that ${feature} is available at prediction time and does not leak the outcome.\n- Inspect performance across important groups, time periods, and edge cases.\n- Add features only when they improve repeated validation, not just this test split.\n- Define the real decision, costs, monitoring, and rollback plan before deployment.\n`
+    const markdown = `# ML Quest Experiment Brief\n\n## Question\nCan **${feature}** help predict **${target}** in the **${dataset.name}** dataset?\n\n## Data\n- ${validRows.length} usable rows\n- ${result.trainCount} training rows / ${result.testCount} validation rows\n- Task: ${task}\n\n## Model\nA transparent one-feature ${task === 'regression' ? 'linear regression' : 'threshold classifier'}: \`${result.modelLabel}\`\n\n## Result\n- ${result.primaryName}: ${formatMetric(result.primary)}\n- Baseline ${result.primaryName}: ${formatMetric(result.baseline)}\n- The model ${direction} the simple baseline on this exploratory validation split.\n${result.metrics.map(metric => `- ${metric.label}: ${metric.value}`).join('\n')}\n\n## Risks and next steps\n- Validate that ${feature} is available at prediction time and does not leak the outcome.\n- Inspect performance across important groups, time periods, and edge cases.\n- Repeated feature or split choices use validation, not a final test. Reserve separate untouched data for the final estimate.\n- This shuffled-row exercise is not a time-series backtest; temporal data needs as-of features and chronological origins.\n- Define the real decision, costs, monitoring, and rollback plan before deployment.\n`
     const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown' }))
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${dataset.id}-experiment-brief.md`; anchor.click(); URL.revokeObjectURL(url)
   }
   return <main className="playground-shell">
-    <section className="playground-intro"><p className="eyebrow">Data playground · local & private</p><h1>Run the whole ML loop on a dataset.</h1><p>Choose the question, hide a test set, fit a transparent model, and make it beat a baseline. Nothing uploads; every calculation happens in this browser.</p></section>
+    <section className="playground-intro"><p className="eyebrow">Data playground · local & private</p><h1>Explore a dataset with honest validation.</h1><p>Choose a question, hold out validation rows, fit a transparent model, and compare a baseline. Nothing uploads; every calculation happens in this browser.</p><p>Repeatedly choosing features or splits makes these exploratory validation scores—not a final test. Reserve separate untouched data before claiming generalization. This shuffled-row playground is not a time-series backtest; use the interview forecasting lab for rolling origins.</p></section>
     <section className="playground-workspace">
       <aside className="data-panel">
         <div className="panel-heading"><span>01 · Data</span><b>{dataset.rows.length} rows</b></div>
@@ -210,12 +210,12 @@ export function Playground() {
         <div className="data-preview"><div><b>{dataset.name}</b><span>{dataset.columns.length} numeric columns</span></div><div className="data-table"><table><thead><tr>{dataset.columns.slice(0, 5).map(column => <th key={column}>{column}</th>)}</tr></thead><tbody>{dataset.rows.slice(0, 5).map((row, index) => <tr key={index}>{dataset.columns.slice(0, 5).map(column => <td key={column}>{row[column]}</td>)}</tr>)}</tbody></table></div></div>
       </aside>
       <section className="experiment-panel">
-        <div className="panel-heading"><span>02 · Experiment</span><b>One feature, honest test</b></div>
+        <div className="panel-heading"><span>02 · Experiment</span><b>One feature, exploratory validation</b></div>
         <div className="experiment-controls">
           <label>Feature <select value={feature} onChange={event => { setFeature(event.target.value); setResult(null) }}>{dataset.columns.map(column => <option key={column}>{column}</option>)}</select><small>Information available before the prediction</small></label>
           <label>Target <select value={target} onChange={event => { setTarget(event.target.value); setResult(null) }}>{dataset.columns.map(column => <option key={column}>{column}</option>)}</select><small>The outcome you want to predict</small></label>
-          <fieldset><legend>Task</legend><div>{(['regression', 'classification'] as const).map(value => <button key={value} className={task === value ? 'active' : ''} onClick={() => { setTask(value); setResult(null) }}>{value}</button>)}</div><small>{task === 'regression' ? 'Predict a continuous number' : 'Treat zero as negative and nonzero as positive'}</small></fieldset>
-          <label className="split-control"><span><b>Training share</b><strong>{trainShare}% train · {100 - trainShare}% test</strong></span><input type="range" min="60" max="90" step="5" value={trainShare} onChange={event => { setTrainShare(Number(event.target.value)); setResult(null) }}/><small>The model never sees the test rows while fitting.</small></label>
+          <fieldset><legend>Task</legend><div>{(['regression', 'classification'] as const).map(value => <button key={value} className={task === value ? 'active' : ''} onClick={() => { setTask(value); setResult(null) }}>{value}</button>)}</div><small>{task === 'regression' ? 'Predict a continuous number' : 'Values greater than zero are positive; zero and negative values are negative. Undefined precision/recall uses a software convention of zero.'}</small></fieldset>
+          <label className="split-control"><span><b>Training share</b><strong>{trainShare}% train · {100 - trainShare}% validation</strong></span><input type="range" min="60" max="90" step="5" value={trainShare} onChange={event => { setTrainShare(Number(event.target.value)); setResult(null) }}/><small>The model never sees the validation rows while fitting.</small></label>
         </div>
         {error && <div className="playground-error"><b>Check the experiment</b><span>{error}</span></div>}
         <button className="button primary run-experiment" onClick={run}>Run honest experiment <span>→</span></button>
@@ -223,9 +223,9 @@ export function Playground() {
     </section>
     <section className={`results-panel ${result ? 'ready' : ''}`}>
       <div className="panel-heading"><span>03 · Evidence</span><b>{result ? `${result.testCount} unseen rows scored` : 'Waiting for an experiment'}</b></div>
-      {!result ? <div className="results-empty"><span>↗</span><h2>Your evidence will appear here.</h2><p>Fit a model above. The hidden test score and the simple baseline will arrive together.</p></div> : <>
+      {!result ? <div className="results-empty"><span>↗</span><h2>Your evidence will appear here.</h2><p>Fit a model above. The validation score and the simple baseline will arrive together.</p></div> : <>
         <div className="metric-grid">{result.metrics.map(metric => <article key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong><p>{metric.note}</p></article>)}</div>
-        <div className="evidence-grid"><Plot result={result} feature={feature} target={target}/><article className={`baseline-verdict ${beatsBaseline ? 'won' : ''}`}><span>Baseline verdict</span><h2>{beatsBaseline ? 'The model earned its complexity.' : 'The baseline still wins.'}</h2><p>{result.task === 'regression' ? `The model’s typical miss is ${formatMetric(Math.abs(result.baseline - result.primary), 1)} target units ${result.primary < result.baseline ? 'smaller' : 'larger'} than guessing the training mean.` : `Test F1 is ${formatMetric(result.primary)} versus ${formatMetric(result.baseline)} for predicting the majority class.`}</p><ul><li>Try a different feature.</li><li>Change the split and look for fragility.</li><li>Check whether the feature leaks the answer.</li></ul></article></div>
+        <div className="evidence-grid"><Plot result={result} feature={feature} target={target}/><article className={`baseline-verdict ${beatsBaseline ? 'won' : ''}`}><span>Baseline verdict · this validation split</span><h2>{beatsBaseline ? 'The model beats this baseline here.' : 'The model does not beat the baseline here.'}</h2><p>{result.task === 'regression' ? `The model’s typical miss is ${formatMetric(Math.abs(result.baseline - result.primary), 1)} target units ${result.primary < result.baseline ? 'smaller' : 'larger'} than guessing the training mean.` : `Validation F1 is ${formatMetric(result.primary)} versus ${formatMetric(result.baseline)} for predicting the majority class.`}</p><ul><li>Try a different feature.</li><li>Change the split and look for fragility.</li><li>Check whether the feature leaks the answer.</li><li>Reserve a separate final test after selecting the approach.</li></ul></article></div>
         <div className="brief-bar"><div><span>Portfolio artifact</span><b>Turn this run into an experiment brief.</b><p>Includes the question, split, model, evidence, baseline verdict, risks, and next steps.</p></div><button className="button primary" onClick={downloadBrief}>Download .md brief <span>↓</span></button></div>
       </>}
     </section>
