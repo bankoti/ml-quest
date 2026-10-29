@@ -52,3 +52,5 @@ This is new verification, not a retroactive claim that the September checks pass
 ## Scope and release boundary
 
 These are deterministic teaching exercises and browser checks, not a real-world forecasting benchmark, causal validation, or a prediction of an interview outcome. The build still reports a non-failing large-chunk warning (about 229 KB gzipped application JavaScript); there is no new runtime dependency. New hosting/publication is a separate release step and must not be inferred from local verification.
+
+A clean release install exposed existing development-tool advisories. Vite was patched from 8.2.2 to 8.2.4 and the locked transitive source-map-js from 1.2.1 to 1.2.2, with no runtime dependencies added. `npm audit` reports zero known vulnerabilities after those updates. The complete suite passed again on Vite 8.2.4; a recursive byte comparison confirmed that the resulting `dist` matches the browser-tested build. This is a point-in-time audit, not a guarantee against future advisories.

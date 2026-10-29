@@ -55,7 +55,7 @@ npm install
 npm run dev
 ```
 
-Run `npm test` for a production build plus all core and interview checks. Node 22+ and Python 3 are required for development tests. Run `npm run test:interview` for the focused forecasting/policy mathematics, real CPython exercise contracts, and React interface tests. The interface harness stubs only Python execution for race/cancellation testing; it does not substitute for a real browser/WASM check.
+Run `npm test` for a production build plus all core and interview checks. Node 22.12+ and Python 3 are required for development tests. Run `npm run test:interview` for the focused forecasting/policy mathematics, real CPython exercise contracts, and React interface tests. The interface harness stubs only Python execution for race/cancellation testing; it does not substitute for a real browser/WASM check.
 
 The behavior checks exercise every lab, mathematical invariants at all 101 slider positions, lesson resume, separate plan/build completion, beginner and experiment-notebook persistence, comparison-fit metrics, draft preservation, stale preview-message rejection, real Python reference solutions and rejected starters, ZIP round trips, exported HTML prediction parity, model rebuilding, and worker cancellation/timeouts. Tiny deterministic synthetic datasets are teaching tools, not real-world benchmarks. The Data lab also supports independent CSV experiments.
 
