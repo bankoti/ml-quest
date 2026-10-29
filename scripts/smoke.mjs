@@ -1,11 +1,10 @@
-import { readFile, stat, unlink, writeFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
-import { fireEvent, getByRole, getByText, waitFor } from '@testing-library/dom'
+import { fireEvent, getByLabelText, getByRole, getByText, waitFor } from '@testing-library/dom'
 import { JSDOM } from 'jsdom'
 import React, { act } from 'react'
-import ts from 'typescript'
 import { createServer } from 'vite'
 import reactPlugin from '@vitejs/plugin-react'
 
@@ -54,7 +53,7 @@ async function withMountedDom(element, assertion, setup = () => {}) {
   }
 }
 
-async function runComponentSmoke() {
+export async function runComponentSmoke() {
   const pyodideStubId = '\0ml-quest-pyodide-smoke-stub'
   const server = await createServer({
     appType: 'custom',
@@ -65,7 +64,7 @@ async function runComponentSmoke() {
         name: 'ml-quest-pyodide-smoke-stub',
         enforce: 'pre',
         resolveId(source, importer) {
-          if (source === './engine/pyodide' && (importer?.endsWith('/src/CodeLab.tsx') || importer?.endsWith('/src/ProjectStudio.tsx'))) return pyodideStubId
+          if (source === './engine/pyodide' && (importer?.endsWith('/src/CodeLab.tsx') || importer?.endsWith('/src/ProjectStudio.tsx') || importer?.endsWith('/src/BeginnerTrack.tsx'))) return pyodideStubId
           return null
         },
         load(id) {
@@ -81,13 +80,30 @@ async function runComponentSmoke() {
   })
 
   try {
-    const [{ InteractiveLab }, { CodeLab }, models, { App, resumeHref }, { CAPSTONES }] = await Promise.all([
+    const [{ InteractiveLab }, { CodeLab }, models, { App, resumeHref }, { CAPSTONES }, { LESSONS }, { CODE_CHALLENGES }, { GLOSSARY, FORMULAS }, playgroundModule] = await Promise.all([
       server.ssrLoadModule('/src/Lab.tsx'),
       server.ssrLoadModule('/src/CodeLab.tsx'),
       server.ssrLoadModule('/src/labModels.ts'),
       server.ssrLoadModule('/src/App.tsx'),
       server.ssrLoadModule('/src/capstones.ts'),
+      server.ssrLoadModule('/src/curriculum.ts'),
+      server.ssrLoadModule('/src/codeChallenges.ts'),
+      server.ssrLoadModule('/src/reference.ts'),
+      server.ssrLoadModule('/src/Playground.tsx'),
     ])
+
+    const inventory = {
+      lessonCount: LESSONS.length,
+      challengeCount: Object.keys(CODE_CHALLENGES).length,
+      glossaryCount: GLOSSARY.length,
+      formulaCount: FORMULAS.length,
+      capstoneCount: CAPSTONES.length,
+      decisionCount: CAPSTONES.reduce((count, project) => count + project.decisions.length, 0),
+    }
+    assert.deepEqual(inventory, { lessonCount: 27, challengeCount: 27, glossaryCount: 47, formulaCount: 11, capstoneCount: 3, decisionCount: 15 }, 'Loaded course inventory must preserve the release contract')
+    const lessonSlugs = LESSONS.map(lesson => lesson.slug)
+    assert.equal(new Set(lessonSlugs).size, LESSONS.length, 'Every lesson has a unique slug')
+    assert.deepEqual(Object.keys(CODE_CHALLENGES).sort(), [...lessonSlugs].sort(), 'Every lesson has exactly one Python challenge')
 
     await withMountedDom(React.createElement(InteractiveLab, { lab: 'classifier' }), async container => {
       const label = 'decision threshold'
@@ -136,7 +152,6 @@ async function runComponentSmoke() {
       m.support.forEach((support, i) => assert.equal(support, models.svmData[i].label * m.weight * models.svmData[i].x <= 1 + 1e-8))
     }
     const advanced = await server.ssrLoadModule('/src/computedModels.ts')
-    const { LESSONS } = await server.ssrLoadModule('/src/curriculum.ts')
     for (const lesson of LESSONS) {
       await withMountedDom(React.createElement(InteractiveLab, { lab: lesson.lab }), async container => {
         assert.match(container.querySelector('.lab-topline').textContent, /computed experiment/)
@@ -173,6 +188,82 @@ async function runComponentSmoke() {
 
     const emptyProgress = { lessons: [], code: [], activeDates: [], capstones: [], review: {} }
     const setRoute = async hash => act(async () => { window.location.hash = hash; window.dispatchEvent(new window.HashChangeEvent('hashchange')) })
+    const weakLesson = LESSONS[4]
+    await withMountedDom(React.createElement(App), async (container, remount) => {
+      const reviewLink = getByRole(container, 'link', { name: /Start a review session/ })
+      assert.equal(reviewLink.getAttribute('href'), '#/review')
+      await setRoute(reviewLink.getAttribute('href'))
+      getByRole(container, 'heading', { name: weakLesson.quiz.question })
+      assert.equal(getByRole(container, 'link', { name: /Open lesson/ }).getAttribute('href'), `#/lesson/${weakLesson.slug}`)
+      assert.ok(getByRole(container, 'button', { name: /Check answer/ }).disabled)
+      const wrongAnswer = weakLesson.quiz.options[(weakLesson.quiz.correct + 1) % weakLesson.quiz.options.length]
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: name => name.endsWith(wrongAnswer) })))
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Check answer/ })))
+      getByText(container, 'This one will come back sooner.')
+      let saved = JSON.parse(localStorage.getItem('ml-quest-progress-v2'))
+      assert.equal(saved.review[weakLesson.slug].attempts, 3)
+      assert.equal(saved.review[weakLesson.slug].correct, 0)
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Next question/ })))
+      assert.notEqual(getByRole(container, 'link', { name: /Open lesson/ }).getAttribute('href'), `#/lesson/${weakLesson.slug}`)
+      await remount()
+      getByRole(container, 'heading', { name: weakLesson.quiz.question })
+      const correctAnswer = weakLesson.quiz.options[weakLesson.quiz.correct]
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: name => name.endsWith(correctAnswer) })))
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Check answer/ })))
+      getByText(container, 'Recalled.')
+      saved = JSON.parse(localStorage.getItem('ml-quest-progress-v2'))
+      assert.equal(saved.review[weakLesson.slug].attempts, 4)
+      assert.equal(saved.review[weakLesson.slug].correct, 1)
+      assert.ok(Number.isFinite(Date.parse(saved.review[weakLesson.slug].lastReviewed)))
+      assert.deepEqual(saved.lessons, [])
+      assert.deepEqual(saved.code, [])
+    }, window => {
+      const lastReviewed = new Date().toISOString()
+      const review = Object.fromEntries(LESSONS.map(lesson => [lesson.slug, { attempts: 2, correct: lesson === weakLesson ? 0 : 2, lastReviewed }]))
+      window.localStorage.setItem('ml-quest-progress-v2', JSON.stringify({ ...emptyProgress, review }))
+    })
+
+    await withMountedDom(React.createElement(App), async container => {
+      const playgroundLink = getByRole(container, 'link', { name: /Open data playground/ })
+      assert.equal(playgroundLink.getAttribute('href'), '#/playground')
+      await setRoute(playgroundLink.getAttribute('href'))
+      getByRole(container, 'heading', { name: 'Explore a dataset with honest validation.' })
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Run honest experiment/ })))
+      getByRole(container, 'img', { name: 'price_k by area_sqft with fitted model' })
+      getByRole(container, 'heading', { name: 'The model beats this baseline here.' })
+      const csvText = 'feature,target\n1,2\n2,4\n3,6\n4,8\n5,10\n6,12\n7,14\n8,16'
+      const csvFile = new window.File([csvText], 'tiny.csv', { type: 'text/csv' })
+      Object.defineProperty(csvFile, 'text', { value: async () => csvText })
+      await act(async () => fireEvent.change(getByLabelText(container, /Load your CSV/), { target: { files: [csvFile] } }))
+      assert.equal(getByRole(container, 'combobox', { name: /^Feature/ }).value, 'feature')
+      assert.equal(getByRole(container, 'combobox', { name: /^Target/ }).value, 'target')
+      getByRole(container, 'heading', { name: 'Your evidence will appear here.' })
+      await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Run honest experiment/ })))
+      getByText(container, '2 unseen rows scored')
+      getByRole(container, 'img', { name: 'target by feature with fitted model' })
+      let brief, download
+      const revokedUrls = []
+      const createObjectURL = URL.createObjectURL, revokeObjectURL = URL.revokeObjectURL
+      const anchorClick = window.HTMLAnchorElement.prototype.click
+      URL.createObjectURL = blob => { brief = blob; return 'blob:ml-quest-smoke-brief' }
+      URL.revokeObjectURL = url => revokedUrls.push(url)
+      window.HTMLAnchorElement.prototype.click = function () { download = { href: this.href, filename: this.download } }
+      try {
+        await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Download \.md brief/ })))
+        assert.equal(brief.type, 'text/markdown')
+        assert.match(await brief.text(), /Can \*\*feature\*\* help predict \*\*target\*\* in the \*\*tiny\*\* dataset\?/)
+        assert.match(await brief.text(), /6 training rows \/ 2 validation rows/)
+        assert.match(await brief.text(), /The model beat the simple baseline on this exploratory validation split\./)
+        assert.match(download.filename, /^upload-\d+-experiment-brief\.md$/)
+        assert.equal(download.href, 'blob:ml-quest-smoke-brief')
+        assert.deepEqual(revokedUrls, [download.href])
+      } finally {
+        URL.createObjectURL = createObjectURL
+        URL.revokeObjectURL = revokeObjectURL
+        window.HTMLAnchorElement.prototype.click = anchorClick
+      }
+    })
+
     await withMountedDom(React.createElement(App), async (container, remount) => {
       assert.equal(resumeHref({ lessons: ['machines-that-learn'], code: [] }), '#/lesson/machines-that-learn/code')
       await setRoute('#/lesson/linear-regression/experiment')
@@ -258,6 +349,7 @@ async function runComponentSmoke() {
         assert.ok(getByRole(container, 'button', { name: /Download project kit/ }).disabled)
         await act(async () => fireEvent.click(getByRole(container, 'button', { name: /Launch portable predictor/ })))
         const frame = container.querySelector('iframe'), nonce = JSON.parse(frame.getAttribute('srcdoc').match(/, nonce=("[^"]*");/)[1])
+        assert.deepEqual(new Set(frame.getAttribute('sandbox').split(/\s+/)), new Set(['allow-scripts', 'allow-forms']), 'Portable forms must work while keeping the preview cross-origin and unable to navigate the top-level page')
         const message = { type: 'mlq-predictor-ready', nonce, predictions: expected.artifact.vectors.map(v => v.prediction) }
         await act(async () => window.dispatchEvent(new window.MessageEvent('message', { source: frame.contentWindow, data: { ...message, nonce: 'stale-preview' } })))
         assert.ok(getByRole(container, 'button', { name: /Finish build/ }).disabled, 'Stale preview messages cannot unlock completion')
@@ -279,7 +371,11 @@ async function runComponentSmoke() {
         const savedDraft = localStorage.getItem(`ml-quest-build-v1:${spec.slug}`)
         await setRoute('#/'); window.confirm = () => true
         assert.match(container.querySelector('.projects-card').textContent, /Deployment-ready builds · 1\/3/)
+        localStorage.setItem('ml-quest-beginner-progress-v1', '["variables-and-arithmetic"]')
+        localStorage.setItem('ml-quest-experiment-guide-v1:linear-regression', '{"reflection":"My saved observation"}')
         await act(async () => fireEvent.click(getByRole(container, 'button', { name: 'Reset progress' })))
+        assert.equal(localStorage.getItem('ml-quest-beginner-progress-v1'), '["variables-and-arithmetic"]', 'Core reset preserves independent beginner completion')
+        assert.equal(localStorage.getItem('ml-quest-experiment-guide-v1:linear-regression'), '{"reflection":"My saved observation"}', 'Core reset preserves formative notes')
         assert.equal(localStorage.getItem(`ml-quest-build-v1:${spec.slug}`), savedDraft, 'Progress reset preserves project code')
       }, seed)
     }
@@ -319,6 +415,60 @@ async function runComponentSmoke() {
     })
     delete globalThis.__mlqProjectRunner
 
+    const { ModelComparison, compareModels } = await server.ssrLoadModule('/src/ModelComparison.tsx')
+    for (const shape of ['linear', 'curved']) for (let noiseStep = 0; noiseStep <= 10; noiseStep++) for (let penaltyStep = 0; penaltyStep <= 50; penaltyStep++) {
+      const noise = noiseStep / 10, penalty = penaltyStep / 10
+      const experiment = compareModels(shape, noise, penalty)
+      assert.equal(experiment.train.length, 20); assert.equal(experiment.validation.length, 10)
+      assert.equal(new Set([...experiment.train, ...experiment.validation].map(r => r.id)).size, 30)
+      for (const model of experiment.models) {
+        const error = rows => rows.reduce((sum, r) => sum + (r.y - model.predict(r.x)) ** 2, 0) / rows.length
+        assert.ok(Math.abs(error(experiment.train) - model.trainMSE) < 1e-8)
+        assert.ok(Math.abs(error(experiment.validation) - model.validationMSE) < 1e-8)
+        assert.ok(model.curve.every(p => Number.isFinite(p.y) && p.y >= experiment.yMin && p.y <= experiment.yMax))
+      }
+      const average = experiment.train.reduce((sum, r) => sum + r.y, 0) / experiment.train.length
+      assert.ok(Math.abs(experiment.models[0].predict(10) - average) < 1e-8, 'Baseline uses training mean only')
+      if (noise === 0) assert.ok(experiment.models[shape === 'linear' ? 1 : 2].validationMSE < 1e-10)
+    }
+    await withMountedDom(React.createElement(ModelComparison), async container => {
+      const commit = getByRole(container, 'button', { name: /Commit prediction/ })
+      assert.ok(commit.disabled)
+      assert.equal(container.querySelector('.comparison-results'), null)
+      await act(async () => fireEvent.click(getByRole(container, 'radio', { name: 'Linear regression', exact: true })))
+      await act(async () => fireEvent.click(commit))
+      assert.equal(container.querySelectorAll('.comparison-grid article').length, 4)
+      assert.match(getByRole(container, 'status').textContent, /You predicted Linear regression/)
+      await act(async () => fireEvent.change(getByRole(container, 'combobox', { name: 'Underlying relationship' }), { target: { value: 'linear' } }))
+      assert.equal(container.querySelector('.comparison-results'), null, 'Settings change invalidates the old comparison prediction')
+      assert.ok(getByRole(container, 'button', { name: /Commit prediction/ }).disabled)
+    })
+
+    await withMountedDom(React.createElement(App), async container => {
+      assert.equal(getByRole(container, 'link', { name: /Start from zero/ }).getAttribute('href'), '#/starter')
+      await setRoute('#/map')
+      getByRole(container, 'main')
+      for (const link of container.querySelectorAll('a[href^="#/lesson/"]')) {
+        const slug = link.getAttribute('href').split('/')[2]
+        assert.ok(LESSONS.some(lesson => lesson.slug === slug), `Map link must resolve: ${slug}`)
+      }
+      assert.equal(JSON.parse(localStorage.getItem('ml-quest-progress-v2')).lessons.length, 0)
+      await setRoute('#/compare')
+      getByRole(container, 'combobox', { name: 'Underlying relationship' })
+    })
+
+    const { BEGINNER_UNITS } = await server.ssrLoadModule('/src/beginnerContent.ts')
+    for (const finished of [1, BEGINNER_UNITS.length]) {
+      await withMountedDom(React.createElement(App), async container => {
+        const link = getByRole(container, 'link', { name: finished === 1 ? /Continue foundations/ : /Start learning/ })
+        assert.equal(link.getAttribute('href'), finished === 1 ? `#/starter/${BEGINNER_UNITS[1].slug}` : '#/lesson/machines-that-learn')
+        await setRoute('#/starter')
+        getByRole(container, 'main')
+        assert.equal(container.querySelectorAll('[aria-label="ML Quest home"]').length, 1, 'Starter owns one header, not nested navigation')
+        assert.equal(JSON.parse(localStorage.getItem('ml-quest-progress-v2')).lessons.length, 0, 'Starter completion does not earn core mastery')
+      }, window => window.localStorage.setItem('ml-quest-beginner-progress-v1', JSON.stringify(BEGINNER_UNITS.slice(0, finished).map(unit => unit.slug))))
+    }
+
     const challenge = {
       title: 'Persistence smoke quest',
       task: 'Keep the learner code and result after mastery updates.',
@@ -346,91 +496,61 @@ async function runComponentSmoke() {
         if (editor.value !== learnerCode) throw new Error('Successful CodeLab run did not preserve the learner code')
       })
     })
+    return { ...inventory, CODE_CHALLENGES, playgroundModule }
   } finally {
     await server.close()
   }
 }
 
-const html = await readFile('dist/index.html', 'utf8')
-const jsMatch = html.match(/src="([^"]+\.js)"/)
-if (!html.includes('ML Quest') || !jsMatch) throw new Error('Built page is missing course metadata or JavaScript')
-const asset = jsMatch[1].replace(/^\/?ml-quest\//, '').replace(/^\//, '')
-const info = await stat(`dist/${asset}`)
-if (info.size < 20_000) throw new Error('Application bundle is unexpectedly small')
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const html = await readFile('dist/index.html', 'utf8')
+  const jsMatch = html.match(/src="([^"]+\.js)"/)
+  if (!html.includes('ML Quest') || !jsMatch) throw new Error('Built page is missing course metadata or JavaScript')
+  const asset = jsMatch[1].replace(/^\/?ml-quest\//, '').replace(/^\//, '')
+  const info = await stat(`dist/${asset}`)
+  if (info.size < 20_000) throw new Error('Application bundle is unexpectedly small')
 
-const curriculum = await readFile('src/curriculum.ts', 'utf8')
-const challenges = await readFile('src/codeChallenges.ts', 'utf8')
-const reference = await readFile('src/reference.ts', 'utf8')
-const capstones = await readFile('src/capstones.ts', 'utf8')
-const app = await readFile('src/App.tsx', 'utf8')
-const playground = await readFile('src/Playground.tsx', 'utf8')
-const labs = await readFile('src/Lab.tsx', 'utf8')
-const lessonCount = (curriculum.match(/lesson\('/g) || []).length
-const challengeCount = (challenges.match(/title: '/g) || []).length
-const glossaryCount = (reference.match(/term: '/g) || []).length
-const formulaCount = (reference.match(/name: '/g) || []).length
-const capstoneCount = (capstones.match(/slug: '/g) || []).length
-const decisionCount = (capstones.match(/title: '/g) || []).length - capstoneCount
-if (lessonCount !== 27 || challengeCount !== 27 || glossaryCount !== 47 || formulaCount !== 11 || capstoneCount !== 3 || decisionCount !== 15) throw new Error(`Course inventory mismatch: ${lessonCount} lessons, ${challengeCount} challenges, ${glossaryCount} terms, ${formulaCount} formulas, ${capstoneCount} capstones, ${decisionCount} decisions`)
-const lessonSlugs = [...curriculum.matchAll(/lesson\('([^']+)'/g)].map(match => match[1])
-const challengeSlugs = [...challenges.matchAll(/^\s{2}'([^']+)': \{/gm)].map(match => match[1])
-const missingChallenges = lessonSlugs.filter(slug => !challengeSlugs.includes(slug))
-const orphanChallenges = challengeSlugs.filter(slug => !lessonSlugs.includes(slug))
-if (missingChallenges.length || orphanChallenges.length) throw new Error(`Lesson/challenge mismatch: missing ${missingChallenges.join(', ') || 'none'}, orphaned ${orphanChallenges.join(', ') || 'none'}`)
-// Each lesson lab is rendered and exercised below; component names are not behavior.
-if (!app.includes('buildReviewQueue') || !app.includes("page: 'review'")) throw new Error('Adaptive review route is missing')
-if (!app.includes("page: 'playground'") || !playground.includes('runExperiment') || !playground.includes('parseCsv') || !playground.includes('Download .md brief')) throw new Error('Dataset playground workflow is incomplete')
+  const { lessonCount, challengeCount, glossaryCount, formulaCount, capstoneCount, decisionCount, CODE_CHALLENGES, playgroundModule } = await runComponentSmoke()
+  const regression = playgroundModule.runExperiment(playgroundModule.BUILT_INS[0].rows, 'area_sqft', 'price_k', 'regression', 75)
+  const classificationDataset = playgroundModule.BUILT_INS[1]
+  const classification = playgroundModule.runExperiment(classificationDataset.rows, classificationDataset.feature, classificationDataset.target, 'classification', 75)
+  const classificationScores = classificationDataset.columns.filter(column => column !== classificationDataset.target).map(column => ({ column, result: playgroundModule.runExperiment(classificationDataset.rows, column, classificationDataset.target, 'classification', 75)?.primary }))
+  if (!regression || regression.primary >= regression.baseline) throw new Error('Regression playground model did not beat its baseline')
+  if (!classification || classification.primary <= classification.baseline) throw new Error(`Classification playground model did not beat its baseline (${classification?.primary} vs ${classification?.baseline}; ${JSON.stringify(classificationScores)})`)
+  const csv = playgroundModule.parseCsv('feature,target\n1,2\n2,4\n3,6\n4,8\n5,10\n6,12\n7,14\n8,16', 'tiny.csv')
+  if (csv.rows.length !== 8 || csv.columns.length !== 2) throw new Error('CSV playground import failed')
 
-await runComponentSmoke()
+  const socialImage = await stat('dist/og.png')
+  if (socialImage.size < 100_000 || !html.includes('og:image:width" content="1716"') || !html.includes('27 visual lessons. 27 Python quests. 8 animated supervised algorithms. Zero setup.')) throw new Error('Social preview metadata or image is incomplete')
 
-const playgroundRuntime = 'scripts/.playground-smoke-runtime.mjs'
-const compiledPlayground = ts.transpileModule(playground, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText
-await writeFile(playgroundRuntime, compiledPlayground)
-let playgroundModule
-try { playgroundModule = await import(`${pathToFileURL(playgroundRuntime).href}?${Date.now()}`) } finally { await unlink(playgroundRuntime) }
-const regression = playgroundModule.runExperiment(playgroundModule.BUILT_INS[0].rows, 'area_sqft', 'price_k', 'regression', 75)
-const classificationDataset = playgroundModule.BUILT_INS[1]
-const classification = playgroundModule.runExperiment(classificationDataset.rows, classificationDataset.feature, classificationDataset.target, 'classification', 75)
-const classificationScores = classificationDataset.columns.filter(column => column !== classificationDataset.target).map(column => ({ column, result: playgroundModule.runExperiment(classificationDataset.rows, column, classificationDataset.target, 'classification', 75)?.primary }))
-if (!regression || regression.primary >= regression.baseline) throw new Error('Regression playground model did not beat its baseline')
-if (!classification || classification.primary <= classification.baseline) throw new Error(`Classification playground model did not beat its baseline (${classification?.primary} vs ${classification?.baseline}; ${JSON.stringify(classificationScores)})`)
-const csv = playgroundModule.parseCsv('feature,target\n1,2\n2,4\n3,6\n4,8\n5,10\n6,12\n7,14\n8,16', 'tiny.csv')
-if (csv.rows.length !== 8 || csv.columns.length !== 2) throw new Error('CSV playground import failed')
+  for (const [slug, challenge] of Object.entries(CODE_CHALLENGES)) {
+    const check = spawnSync('python3', ['-c', 'import sys; compile(sys.stdin.read(), "challenge.py", "exec")'], { input: `${challenge.starter}\n\n${challenge.tests}`, encoding: 'utf8' })
+    if (check.status !== 0) throw new Error(`Python challenge ${slug} has invalid syntax: ${check.stderr}`)
+  }
 
-const socialImage = await stat('dist/og.png')
-if (socialImage.size < 100_000 || !html.includes('og:image:width" content="1716"') || !html.includes('27 visual lessons. 27 Python quests. 8 animated supervised algorithms. Zero setup.')) throw new Error('Social preview metadata or image is incomplete')
+  const supervisedSolutions = {
+    'logistic-classification': `def sigmoid(scores):
+      import math
+      return [1 / (1 + math.exp(-score)) for score in scores]`,
+    'knn-classification': `def knn_predict(train_x, train_y, query, k=3):
+      nearest = sorted(zip(train_x, train_y), key=lambda pair: abs(pair[0] - query))[:k]
+      labels = [label for _, label in nearest]
+      return 1 if sum(labels) > len(labels) / 2 else 0`,
+    'support-vector-machines': `def svm_predict(values, weight, bias):
+      return [1 if weight * value + bias >= 0 else -1 for value in values]`,
+    'ensemble-power': `def ensemble_vote(predictions):
+      if not predictions:
+          return []
+      return [1 if sum(votes) > len(votes) / 2 else 0 for votes in zip(*predictions)]`,
+    'gradient-boosting': `def residuals(actual, predicted):
+      return [truth - guess for truth, guess in zip(actual, predicted)]`,
+  }
+  for (const [slug, solution] of Object.entries(supervisedSolutions)) {
+    const challengeTests = CODE_CHALLENGES[slug]?.tests
+    if (!challengeTests) throw new Error(`Could not locate tests for ${slug}`)
+    const check = spawnSync('python3', ['-c', `${solution}\n\n${challengeTests}`], { encoding: 'utf8' })
+    if (check.status !== 0) throw new Error(`${slug} reference solution failed: ${check.stderr}`)
+  }
 
-const starters = [...challenges.matchAll(/starter: `([\s\S]*?)`,\n\s*tests:/g)].map(match => match[1])
-const tests = [...challenges.matchAll(/tests: `([\s\S]*?)`,\n\s*hints:/g)].map(match => match[1])
-if (starters.length !== lessonCount || tests.length !== lessonCount) throw new Error('Could not read all Python challenge sources')
-for (let index = 0; index < lessonCount; index += 1) {
-  const check = spawnSync('python3', ['-c', 'import sys; compile(sys.stdin.read(), "challenge.py", "exec")'], { input: `${starters[index]}\n\n${tests[index]}`, encoding: 'utf8' })
-  if (check.status !== 0) throw new Error(`Python challenge ${index + 1} has invalid syntax: ${check.stderr}`)
+  console.log(`Course check passed (${lessonCount} lessons, ${challengeCount} Python quests, 8 supervised algorithms with dedicated labs, ${capstoneCount} capstones, ${decisionCount} project decisions, data playground + CSV brief export, ${glossaryCount} terms, ${formulaCount} formulas, ${Math.round(info.size / 1024)} KB app bundle)`)
 }
-
-const supervisedSolutions = {
-  'logistic-classification': `def sigmoid(scores):
-    import math
-    return [1 / (1 + math.exp(-score)) for score in scores]`,
-  'knn-classification': `def knn_predict(train_x, train_y, query, k=3):
-    nearest = sorted(zip(train_x, train_y), key=lambda pair: abs(pair[0] - query))[:k]
-    labels = [label for _, label in nearest]
-    return 1 if sum(labels) > len(labels) / 2 else 0`,
-  'support-vector-machines': `def svm_predict(values, weight, bias):
-    return [1 if weight * value + bias >= 0 else -1 for value in values]`,
-  'ensemble-power': `def ensemble_vote(predictions):
-    if not predictions:
-        return []
-    return [1 if sum(votes) > len(votes) / 2 else 0 for votes in zip(*predictions)]`,
-  'gradient-boosting': `def residuals(actual, predicted):
-    return [truth - guess for truth, guess in zip(actual, predicted)]`,
-}
-for (const [slug, solution] of Object.entries(supervisedSolutions)) {
-  const pattern = new RegExp("  '" + slug + "': \\{[\\s\\S]*?tests: `([\\s\\S]*?)`,\\n\\s*hints:")
-  const challengeTests = challenges.match(pattern)?.[1]
-  if (!challengeTests) throw new Error(`Could not locate tests for ${slug}`)
-  const check = spawnSync('python3', ['-c', `${solution}\n\n${challengeTests}`], { encoding: 'utf8' })
-  if (check.status !== 0) throw new Error(`${slug} reference solution failed: ${check.stderr}`)
-}
-
-console.log(`Course check passed (${lessonCount} lessons, ${challengeCount} Python quests, 8 supervised algorithms with dedicated labs, ${capstoneCount} capstones, ${decisionCount} project decisions, data playground + CSV brief export, ${glossaryCount} terms, ${formulaCount} formulas, ${Math.round(info.size / 1024)} KB app bundle)`)

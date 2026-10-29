@@ -7,6 +7,12 @@ import { InteractiveLab } from './Lab'
 import { Playground } from './Playground'
 import { ProjectStudio } from './ProjectStudio'
 import { FORMULAS, GLOSSARY, MODEL_CHOOSER } from './reference'
+import { BeginnerTrack, readBeginnerProgress } from './BeginnerTrack'
+import { BEGINNER_UNITS } from './beginnerContent'
+import { LearningMap, LessonMapContext } from './LearningMap'
+import { ExperimentGuide } from './ExperimentGuide'
+import { ModelComparison } from './ModelComparison'
+import { InterviewCourse } from './InterviewCourse'
 
 const STORAGE_KEY = 'ml-quest-progress-v2'
 const LEGACY_KEY = 'ml-quest-progress-v1'
@@ -26,7 +32,9 @@ type Route =
   | { page: 'home'; anchor?: 'curriculum' | 'how-it-works' }
   | { page: 'lesson'; slug: string; initialStep?: number }
   | { page: 'project'; slug: string; initialBuild?: boolean }
-  | { page: 'practice' | 'projects' | 'review' | 'playground' | 'reference' | 'certificate' }
+  | { page: 'starter'; slug?: string }
+  | { page: 'interview'; section?: string }
+  | { page: 'practice' | 'projects' | 'review' | 'playground' | 'reference' | 'certificate' | 'map' | 'compare' }
 
 function todayKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -76,6 +84,18 @@ export function resumeHref(progress: Pick<ProgressState, 'lessons' | 'code'>) {
 }
 
 function parseRoute(hash: string): Route {
+  const interview = hash.match(/^#\/interview(?:\/([^/]+))?$/)
+  if (interview) {
+    try { return { page: 'interview', section: interview[1] ? decodeURIComponent(interview[1]) : undefined } }
+    catch { return { page: 'interview' } }
+  }
+  const starter = hash.match(/^#\/starter(?:\/([^/]+))?$/)
+  if (starter) {
+    try { return { page: 'starter', slug: starter[1] ? decodeURIComponent(starter[1]) : undefined } }
+    catch { return { page: 'starter' } }
+  }
+  if (hash === '#/map') return { page: 'map' }
+  if (hash === '#/compare') return { page: 'compare' }
   const lesson = hash.match(/^#\/lesson\/([^/]+)(?:\/([^/]+))?$/)
   if (lesson) {
     try { return { page: 'lesson', slug: decodeURIComponent(lesson[1]), initialStep: Math.max(0, STEP_PATHS.indexOf(lesson[2] || '')) } }
@@ -119,7 +139,7 @@ function Brand({ dark = false }: { dark?: boolean }) {
 
 function TopNav({ progress, dark = false }: { progress: ProgressState; dark?: boolean }) {
   const total = progress.lessons.length + progress.code.length
-  const destinations = [['Course', 'curriculum'], ['Practice', 'practice'], ['Projects', 'projects'], ['Data lab', 'playground'], ['Review', 'review'], ['Reference', 'reference']]
+  const destinations = [['Interview sprint', 'interview'], ['Learning map', 'map'], ['Course', 'curriculum'], ['Practice', 'practice'], ['Compare', 'compare'], ['Projects', 'projects'], ['Data lab', 'playground'], ['Review', 'review'], ['Reference', 'reference']]
   const links = destinations.map(([label, path]) => <a key={path} href={`#/${path}`}>{label}</a>)
   return <nav className={`site-nav ${dark ? 'nav-dark' : ''}`} aria-label="Main navigation">
     <Brand dark={dark}/>
@@ -141,16 +161,21 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
   const mastery = progress.lessons.length + progress.code.length
   const streak = getStreak(progress.activeDates)
   const hasProgress = mastery > 0 || progress.capstones.length > 0 || progress.builds.length > 0 || Object.keys(progress.review).length > 0
+  const beginnerProgress = readBeginnerProgress()
+  const nextFoundation = BEGINNER_UNITS.find(unit => !beginnerProgress.includes(unit.slug))
+  const startWithFoundations = !hasProgress && !readBookmark() && Boolean(nextFoundation)
+  const heroHref = startWithFoundations ? beginnerProgress.length ? `#/starter/${nextFoundation!.slug}` : '#/starter' : nextHref
+  const heroAction = startWithFoundations ? beginnerProgress.length ? 'Continue foundations' : 'Start from zero' : mastery ? 'Continue your quest' : 'Start learning'
   return <div className="site-shell">
     <TopNav progress={progress}/>
     <main>
       <header className="hero">
         <div className="hero-copy">
-          <p className="eyebrow"><span>●</span> A complete zero-to-hero learning path</p>
+          <p className="eyebrow"><span>●</span> From your first line of Python to applied ML</p>
           <h1>Teach machines to <em>see the pattern.</em></h1>
           <p className="hero-lede">Learn machine learning through visual experiments and real Python. Build intuition, practice core algorithms, then train, evaluate, and export working ML projects.</p>
           <div className="hero-actions">
-            <a className="button primary" href={nextHref}>{mastery ? 'Continue your quest' : 'Start learning'} <span>→</span></a>
+            <a className="button primary" href={heroHref}>{heroAction} <span>→</span></a>
             <a className="text-action" href="#/curriculum">Explore the full course ↓</a>
           </div>
           <div className="hero-stats"><span><b>{COURSE_SIZE}</b> visual lessons</span><span><b>{COURSE_SIZE}</b> Python quests</span><span><b>3</b> capstones</span></div>
@@ -163,13 +188,21 @@ function Home({ progress, reset }: { progress: ProgressState; reset: () => void 
 
       <section className="promise-strip" aria-label="Course learning loop"><span>observe</span><i>→</i><span>experiment</span><i>→</i><span>code</span><i>→</i><strong>master</strong></section>
 
+      <section className="interview-entry" aria-label="Interview refresher"><div><p className="section-kicker">Already know the basics? · 7 days × 6 hours</p><h2>Demand forecasting.<br/>Inventory decisions. Research judgment.</h2><p>A focused interview refresher with deeper explanations, worked mathematics, Python and SQL trials, computed labs, and timed mock cases.</p></div><a className="button primary" href="#/interview">Open interview sprint →</a></section>
+
+      <section className="learning-entry" aria-label="Choose your starting point">
+        <a href="#/starter"><span>New to programming?</span><h2>Start with the building blocks.</h2><p>Six gentle Python and visual-math units. No installation, and no assumed coding experience.</p><b>Open beginner track →</b></a>
+        <a href="#/map"><span>Know where you are going</span><h2>A map, and a path through it.</h2><p>Explore the ML landscape, see prerequisites, and distinguish current lessons from future specializations.</p><b>Explore learning map →</b></a>
+        <a href="#/compare"><span>Choose from evidence</span><h2>Compare models on equal terms.</h2><p>Predict which model will win, then compare four fitted models on the same data and validation split.</p><b>Open model comparison →</b></a>
+      </section>
+
       <section id="how-it-works" className="how-section">
         <div className="section-kicker">The complete learning loop</div>
         <div className="how-grid how-grid-four">
           <div><span>01</span><i className="how-icon">◌</i><h2>See it move</h2><p>Every idea starts as a visual model you can change.</p></div>
           <div><span>02</span><i className="how-icon">↔</i><h2>Predict first</h2><p>Build intuition before the terminology arrives.</p></div>
           <div><span>03</span><i className="how-icon">⌘</i><h2>Build it in Python</h2><p>Write the core idea from scratch and run real tests.</p></div>
-          <div><span>04</span><i className="how-icon">✓</i><h2>Prove mastery</h2><p>Earn XP, finish every track, and unlock your certificate.</p></div>
+          <div><span>04</span><i className="how-icon">✓</i><h2>Prove mastery</h2><p>Earn XP, finish the core concept and coding checks, and unlock your certificate.</p></div>
         </div>
       </section>
 
@@ -262,8 +295,8 @@ function LessonPage({ lesson, progress, initialStep = 0, onLessonComplete, onCod
       </section>
       <section className="lesson-copy">
         <div className="copy-inner" tabIndex={-1} aria-label={`${steps[step]} lesson content`}>
-          {step === 0 && <div className="lesson-step"><p className="lesson-kicker">Stage {stage.number} · {stage.shortTitle}</p><h1>{lesson.title}</h1><p className="lesson-lede">{lesson.description}</p><div className="objective"><span>Quest objective</span><p>{lesson.objective}</p></div><div className="copy-callout"><i>↗</i><p><b>Start with the model.</b> Move its control, look for what changes, and make a prediction before you continue.</p></div></div>}
-          {step === 1 && <div className="lesson-step"><p className="lesson-kicker">Experiment</p><h1>Change one thing. Watch everything else.</h1><p className="lesson-lede">{lesson.experiment}</p><div className="experiment-steps"><div><span>1</span><p>Choose a starting position and note the result.</p></div><div><span>2</span><p>Move the control to both extremes.</p></div><div><span>3</span><p>Find the point where the behavior changes.</p></div></div><div className="copy-callout accent"><i>!</i><p>The number is less important than the relationship you observe.</p></div></div>}
+          {step === 0 && <div className="lesson-step"><p className="lesson-kicker">Stage {stage.number} · {stage.shortTitle}</p><h1>{lesson.title}</h1><p className="lesson-lede">{lesson.description}</p><div className="objective"><span>Quest objective</span><p>{lesson.objective}</p></div><div className="copy-callout"><i>↗</i><p><b>Start with a prediction.</b> On the Experiment step, commit to an expected outcome, test it with the model, and explain what surprised you.</p></div><LessonMapContext slug={lesson.slug}/></div>}
+          {step === 1 && <div className="lesson-step"><p className="lesson-kicker">Predict · experiment · explain</p><h1>Make a prediction. Put it to the test.</h1><ExperimentGuide slug={lesson.slug}/></div>}
           {step === 2 && <div className="lesson-step"><p className="lesson-kicker">Mental model</p><h1>Now give the pattern a name.</h1><p className="lesson-lede">{lesson.mentalModel}</p><div className="takeaways">{lesson.takeaways.map((item, takeIndex) => <div key={item}><span>0{takeIndex + 1}</span><p>{item}</p></div>)}</div><p className="memory-line"><b>Remember:</b> if you can predict what the lab will do next, the idea is already becoming yours.</p></div>}
           {step === 3 && <div className="lesson-step"><Quiz lesson={lesson} completed={isComplete} onComplete={() => onLessonComplete(lesson.slug)} /></div>}
           {step === 4 && <div className="lesson-step"><CodeLab slug={lesson.slug} challenge={challenge} passed={codePassed} onPass={() => onCodePass(lesson.slug)}/></div>}
@@ -284,7 +317,7 @@ function PageHeader({ progress, eyebrow, title, lede }: { progress: ProgressStat
 function PracticePage({ progress }: { progress: ProgressState }) {
   const [filter, setFilter] = useState<'all' | 'todo' | 'done'>('all')
   const codeSet = useMemo(() => new Set(progress.code), [progress.code])
-  return <div className="inner-page"><PageHeader progress={progress} eyebrow="Practice track · real Python" title="Make the model from scratch." lede={`${COURSE_SIZE} focused exercises turn every visual intuition into working code. Python runs entirely in your browser; your drafts save automatically.`}/>
+  return <div className="inner-page"><PageHeader progress={progress} eyebrow="Practice track · real Python" title="Build the pieces of a model." lede={`${COURSE_SIZE} focused component drills turn visual intuition into working code. These are warmups, not complete algorithm implementations. Python runs entirely in your browser; your drafts save automatically.`}/>
     <section className="practice-summary"><div><strong>{progress.code.length * 150}</strong><span>coding XP</span></div><div><strong>{progress.code.length}/{COURSE_SIZE}</strong><span>quests solved</span></div><div><strong>{getStreak(progress.activeDates)}</strong><span>day streak</span></div><ProgressRing value={progress.code.length} total={COURSE_SIZE}/></section>
     <section className="practice-list"><div className="filter-bar"><span>Challenge library</span><div>{(['all','todo','done'] as const).map(value => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value}</button>)}</div></div>
       {STAGES.map(stage => {
@@ -419,11 +452,11 @@ function CertificatePage({ progress }: { progress: ProgressState }) {
   const [name, setName] = useState('')
   const mastery = progress.lessons.length + progress.code.length
   const unlocked = mastery >= TOTAL_CHECKS
-  return <div className="inner-page certificate-page"><PageHeader progress={progress} eyebrow="The finish line" title={unlocked ? 'You mastered the full quest.' : 'Your certificate is taking shape.'} lede={unlocked ? 'Add your name to create a printable record of completing both the concept and coding tracks.' : `Complete all ${TOTAL_CHECKS} mastery checks to unlock the ML Quest certificate. You have ${TOTAL_CHECKS - mastery} left.`}/>
+  return <div className="inner-page certificate-page"><PageHeader progress={progress} eyebrow="The core-course finish line" title={unlocked ? 'You completed the core quest.' : 'Your certificate is taking shape.'} lede={unlocked ? 'Add your name to create a printable record of completing the 27-lesson core concept and coding tracks. This does not certify the future specializations shown on the learning map.' : `Complete all ${TOTAL_CHECKS} core mastery checks to unlock the ML Quest certificate. You have ${TOTAL_CHECKS - mastery} left. The optional beginner track and future specializations are separate.`}/>
     <section className="certificate-shell">
       {!unlocked ? <div className="certificate-locked"><ProgressRing value={mastery}/><h2>{mastery}/{TOTAL_CHECKS} checks complete</h2><p>Finish {COURSE_SIZE - progress.lessons.length} concept checkpoints and {COURSE_SIZE - progress.code.length} Python quests.</p><div><a className="button primary" href="#/curriculum">Continue course →</a><a className="button ghost" href="#/practice">Open practice track</a></div></div> : <>
         <label className="name-field">Name on certificate<input value={name} onChange={event => setName(event.target.value)} placeholder="Your name"/></label>
-        <article className="certificate" aria-label="ML Quest certificate of mastery"><div className="cert-top"><Brand/><span>Credential · {credentialCode(name || 'learner')}</span></div><p>Certificate of mastery</p><h2>{name.trim() || 'Your name'}</h2><p>completed the full</p><h3>Machine Learning<br/>Zero-to-Hero Quest</h3><div className="cert-metrics"><span><b>{COURSE_SIZE}</b> concepts</span><span><b>{COURSE_SIZE}</b> Python quests</span><span><b>{getXP(progress)}</b> XP</span></div><footer><span>{new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</span><b>{progress.builds.length ? `${progress.builds.length} deployment-ready builds · ` : progress.capstones.length ? `${progress.capstones.length} project plans · ` : ''}bankoti.github.io/ml-quest</b></footer></article>
+        <article className="certificate" aria-label="ML Quest certificate of mastery"><div className="cert-top"><Brand/><span>Credential · {credentialCode(name || 'learner')}</span></div><p>Certificate of core mastery</p><h2>{name.trim() || 'Your name'}</h2><p>completed the concept and coding tracks of</p><h3>Machine Learning<br/>ML Quest · Core Course</h3><div className="cert-metrics"><span><b>{COURSE_SIZE}</b> concepts</span><span><b>{COURSE_SIZE}</b> Python quests</span><span><b>{getXP(progress)}</b> XP</span></div><footer><span>{new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</span><b>{progress.builds.length ? `${progress.builds.length} deployment-ready builds · ` : progress.capstones.length ? `${progress.capstones.length} project plans · ` : ''}bankoti.github.io/ml-quest</b></footer></article>
         <button className="button primary print-button" disabled={!name.trim()} onClick={() => window.print()}>Print / save certificate <span>→</span></button>
       </>}
     </section>
@@ -458,7 +491,7 @@ export function App() {
     return next
   })
   const reset = () => {
-    if (!window.confirm('Reset all course, project, and review progress? Saved code drafts will remain.')) return
+    if (!window.confirm('Reset core-course, project, and review progress? Saved code drafts, beginner completion, and experiment notes will remain.')) return
     try {
       localStorage.removeItem(STORAGE_KEY)
       localStorage.removeItem(LEGACY_KEY)
@@ -469,6 +502,10 @@ export function App() {
   }
 
   const renderPage = () => {
+  if (route.page === 'interview') return <div className="inner-page"><TopNav progress={progress}/><InterviewCourse key={route.section ?? 'overview'} section={route.section}/></div>
+  if (route.page === 'starter') return <BeginnerTrack initialSlug={route.slug}/>
+  if (route.page === 'map') return <div className="inner-page"><TopNav progress={progress}/><LearningMap completedLessons={progress.lessons} completedCode={progress.code} starterCompleted={readBeginnerProgress()}/></div>
+  if (route.page === 'compare') return <div className="inner-page"><TopNav progress={progress}/><ModelComparison/></div>
   if (route.page === 'lesson') {
     const lesson = getLesson(route.slug)
     if (lesson) return <LessonPage lesson={lesson} progress={progress} initialStep={route.initialStep} onLessonComplete={slug => update('lessons', slug)} onCodePass={slug => update('code', slug)}/>

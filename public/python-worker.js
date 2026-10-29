@@ -1,9 +1,14 @@
 /* Pinned Pyodide runtime; learner code runs off the UI thread and stays local. */
-self.onmessage = async ({ data: { userCode, tests, project } }) => {
+self.onmessage = async ({ data: { userCode, tests, project, packages = [] } }) => {
   try {
+    if (!Array.isArray(packages) || packages.some(name => name !== 'sqlite3')) throw new Error('Unsupported Python package requested.')
     const base = 'https://cdn.jsdelivr.net/pyodide/v0.26.2/full/'
     importScripts(base + 'pyodide.js')
     const py = await loadPyodide({ indexURL: base })
+    // sqlite3 is an optional stdlib package in pinned Pyodide 0.26.2. Keep its
+    // download before ready so it uses the loading budget, not execution time.
+    // Only explicit trusted job metadata can request this allowlisted package.
+    if (packages.includes('sqlite3')) await py.loadPackage('sqlite3')
     py.globals.set('_mlq_source', userCode)
     py.globals.set('_mlq_tests', tests)
     py.globals.set('_mlq_project', project)

@@ -1,14 +1,16 @@
 {
   "name": "ml-quest",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": { "node": ">=22.12" },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "npm run build && node scripts/smoke.mjs && node scripts/computed-smoke.mjs"
+    "test": "npm run build && node scripts/smoke.mjs && node scripts/computed-smoke.mjs && npm run test:learning-flow && npm run test:interview",
+    "test:interview": "node scripts/forecasting-cases.mjs && node scripts/decision-trial-cases.mjs && node scripts/interview-python-cases.mjs && node scripts/interview-ui-cases.mjs",
+    "test:learning-flow": "node scripts/beginner-cases.mjs && node scripts/experiment-cases.mjs && node scripts/learning-map-cases.mjs && node scripts/model-comparison-cases.mjs && node scripts/learning-flow-cases.mjs"
   },
   "dependencies": {
     "react": "19.2.6",
@@ -21,6 +23,6 @@
     "@vitejs/plugin-react": "6.0.2",
     "jsdom": "^25.0.1",
     "typescript": "5.9.3",
-    "vite": "8.2.2"
+    "vite": "8.2.4"
   }
 }

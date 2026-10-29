@@ -215,15 +215,15 @@ assert confusion_counts([], []) == {'tp': 0, 'tn': 0, 'fp': 0, 'fn': 0}, "Empty 
   },
   'precision-and-recall': {
     title: 'Compute precision and recall',
-    task: 'Return (precision, recall), safely returning 0 when a denominator is zero.',
+    task: 'Return (precision, recall). A zero denominator makes the corresponding ratio mathematically undefined. For this coding exercise, explicitly adopt the software convention of returning 0 in that case; do not interpret it as an observed rate.',
     functionName: 'precision_recall',
     starter: `def precision_recall(tp, fp, fn):
     """Compute two core classification metrics."""
     return 0.0, 0.0`,
     tests: `p, r = precision_recall(8, 2, 4)
 assert abs(p - 0.8) < 1e-9 and abs(r - 2/3) < 1e-9, "Precision uses fp; recall uses fn"
-assert precision_recall(0, 0, 5) == (0, 0), "No predicted positives gives zero precision"
-assert precision_recall(0, 3, 0) == (0, 0), "No actual positives gives zero recall"`,
+assert precision_recall(0, 0, 5) == (0, 0), "Use this exercise's zero convention for undefined precision"
+assert precision_recall(0, 3, 0) == (0, 0), "Use this exercise's zero convention for undefined recall"`,
     hints: ['Precision = tp / (tp + fp).', 'Recall = tp / (tp + fn).', 'Check each denominator before dividing.'],
   },
   'cross-validation': {
