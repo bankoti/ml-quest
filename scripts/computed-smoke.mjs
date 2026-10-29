@@ -145,7 +145,7 @@ try {
   // This VM tests our worker protocol with a deliberately fake Pyodide object.
   // It does NOT verify real WASM execution, SQLite compatibility, or CDN access.
   const workerSource = await readFile('public/python-worker.js', 'utf8')
-  function workerProtocol({ packageError, runtimeError, holdPackage = false } = {}) {
+  function workerProtocol({ packageError, runtimeError, holdPackage = false, userCode = 'value = 41\nprint("learner output")', tests = 'assert value + 1 == 42\nprint("test output")', project = false } = {}) {
     const events = [], messages = [], globals = new Map()
     let releasePackage
     const packageGate = new Promise(resolve => { releasePackage = resolve })
@@ -164,26 +164,42 @@ try {
             events.push('package-done')
           },
           async runPythonAsync(code) {
-            assert.match(code, /exec\(_mlq_source, _namespace\)/)
-            assert.equal(globals.get('_mlq_source'), 'learner source')
-            assert.equal(globals.get('_mlq_tests'), 'test source')
             events.push('execute')
-            return JSON.stringify({ ok: true, output: 'protocol stub only', artifact: null })
+            const result = python(`import ast, json, sys
+job = json.load(sys.stdin)
+namespace = job["globals"]
+module = ast.parse(job["code"])
+expression = module.body.pop()
+exec(compile(module, "<worker>", "exec"), namespace)
+print(eval(compile(ast.Expression(expression.value), "<worker>", "eval"), namespace))`, { input: JSON.stringify({ code, globals: Object.fromEntries(globals) }) })
+            assert.ifError(result.error)
+            assert.equal(result.status, 0, result.stderr)
+            return result.stdout.trim()
           },
         }
       },
     }
     vm.runInNewContext(workerSource, workerContext)
-    return { events, messages, releasePackage, start: packages => workerContext.self.onmessage({ data: { userCode: 'learner source', tests: 'test source', project: false, ...(packages === undefined ? {} : { packages }) } }) }
+    return { events, messages, releasePackage, start: packages => workerContext.self.onmessage({ data: { userCode, tests, project, ...(packages === undefined ? {} : { packages }) } }) }
   }
   const coreProtocol = workerProtocol(); await coreProtocol.start()
   assert.deepEqual(coreProtocol.events, ['import', 'runtime', 'ready', 'execute', 'result'], 'Core jobs require no extra package download')
-  const sqlProtocol = workerProtocol({ holdPackage: true }), pendingSql = sqlProtocol.start(['sqlite3', 'sqlite3'])
+  assert.deepEqual(JSON.parse(JSON.stringify(coreProtocol.messages)), [{ ready: true }, { ok: true, output: 'learner output\ntest output\n', artifact: null }])
+  const sqlProtocol = workerProtocol({ holdPackage: true, userCode: 'import sqlite3\nconnection = sqlite3.connect(":memory:")\nvalue = connection.execute("SELECT 21 * 2").fetchone()[0]\nprint(value)', tests: 'assert value == 42' }), pendingSql = sqlProtocol.start(['sqlite3', 'sqlite3'])
   await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(sqlProtocol.events, ['import', 'runtime', 'package-start'])
   assert.equal(sqlProtocol.messages.length, 0, 'Do not signal ready or run Python before package loading completes')
   sqlProtocol.releasePackage(); await pendingSql
   assert.deepEqual(sqlProtocol.events, ['import', 'runtime', 'package-start', 'package-done', 'ready', 'execute', 'result'])
+  assert.deepEqual(JSON.parse(JSON.stringify(sqlProtocol.messages)), [{ ready: true }, { ok: true, output: '42\n', artifact: null }])
+  for (const [job, expected] of [
+    [{ tests: 'print("test started")\nassert value == 0, "wrong value"' }, { ok: false, output: 'learner output\ntest started\n', artifact: null, error: 'AssertionError: wrong value' }],
+    [{ userCode: 'print("before failure")\nraise ValueError("learner failed")', tests: 'raise RuntimeError("tests must not run")' }, { ok: false, output: 'before failure\n', artifact: null, error: 'ValueError: learner failed' }],
+    [{ userCode: 'answer = 42\nprint("project learner")', tests: 'assert learner["answer"] == 42\nartifact = {"prediction": learner["answer"]}\nprint("project grader")', project: true }, { ok: true, output: 'project learner\nproject grader\n', artifact: { prediction: 42 } }],
+  ]) {
+    const protocol = workerProtocol(job); await protocol.start()
+    assert.deepEqual(JSON.parse(JSON.stringify(protocol.messages)), [{ ready: true }, expected])
+  }
   for (const failure of [{ packageError: 'SQLite CDN failed' }, { runtimeError: 'Runtime CDN failed' }]) {
     const protocol = workerProtocol(failure); await protocol.start(['sqlite3'])
     assert.equal(protocol.messages.length, 1); assert.equal(protocol.messages[0].ok, false)
@@ -194,5 +210,5 @@ try {
     const protocol = workerProtocol(); await protocol.start(invalid)
     assert.deepEqual(protocol.events, ['result']); assert.match(protocol.messages[0].error, /Unsupported Python package/)
   }
-  console.log('PASS: 101-position computed-model invariants, three real Python builds, eight-file ZIP exports, portable predictor execution, worker isolation/cancellation/timeouts, and optional-SQLite loading protocol (stubbed, not a real WASM runtime check).')
+  console.log('PASS: 101-position computed-model invariants, three real Python builds, eight-file ZIP exports, portable predictor execution, worker isolation/cancellation/timeouts, emitted harness execution in CPython, and optional-SQLite loading protocol (stubbed, not a real WASM runtime check).')
 } finally { await server.close() }
