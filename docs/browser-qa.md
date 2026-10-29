@@ -10,17 +10,11 @@
 - `DEPLOY_BASE=/ml-quest/ npm test` passed after the fixes. This includes all course/component checks, 101-position model invariants, all three real Python capstone implementations, eight-file ZIP contents, standalone predictor execution, and worker isolation/cancellation/timeout tests.
 - An independent read-only review found no regressions in these changes.
 
-## Still requires interactive browser verification
+## September verification boundary
 
-The in-app browser stopped accepting input after the worked-example native confirmation opened in the disposable QA tab. Its dialog API returned no accessible dialog, and closing the tab timed out. Fresh tabs remained readable, so layout checks continued, but automated/component results are **not** a substitute for the remaining real-browser checks:
+The in-app browser stopped accepting input after the worked-example native confirmation opened in the disposable QA tab. Its dialog API returned no accessible dialog, and closing the tab timed out. Fresh tabs remained readable, so layout checks continued. Automated/component results did not establish a full end-to-end pass at that time. The subsequent [October legacy-capstone verification](#legacy-capstone-gaps-revisited) records completion of the outstanding interaction checks on the current local build.
 
-1. Dismiss the pending confirmation and verify worked-example replacement.
-2. Complete train/evaluate, sandboxed preview parity, edited form predictions, downloads, and build completion for all three capstones.
-3. Exercise the churn rejection/rollback drill in the preview.
-4. Verify saved build artifacts across reload/back/forward and re-launch requirements before downloading.
-5. Exercise animation controls, the mobile menu, and progress reset using the disposable test origin only.
-
-No public-site mastery, drafts, or progress were changed by QA. Browser automation limitations must not be reported as a full end-to-end pass.
+No public-site mastery, drafts, or progress were changed by QA.
 
 ---
 
