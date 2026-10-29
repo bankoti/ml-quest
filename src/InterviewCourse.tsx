@@ -3,6 +3,7 @@ import { getLesson } from './curriculum'
 import { INTERVIEW_MODULES, STUDY_DAYS, COURSE_AUDIT } from './interviewContent'
 import { INTERVIEW_CASES, INTERVIEW_PYTHON, INTERVIEW_SOURCES } from './interviewPractice'
 import { CORE_REFRESHER } from './interviewCore'
+import { BACKTEST_DEBUGGING } from './interviewDebugging'
 import { ForecastingLabs, InterviewNotes } from './ForecastingLabs'
 import { downloadInterviewNotebook, INTERVIEW_PREFIX, readInterviewValue, useInterviewValue } from './interviewStorage'
 import { runChallenge, type RunResult } from './engine/pyodide'
@@ -62,6 +63,27 @@ function Overview() {
   </>
 }
 
+function BacktestDebugging() {
+  const [revealed, setRevealed] = useState(false)
+  const trial = BACKTEST_DEBUGGING
+  return <section className="interview-worked" aria-labelledby="debugging-heading">
+    <p className="section-kicker">Day 4 · 60-minute code-review trial · self-assessment</p>
+    <h2 id="debugging-heading">{trial.title}</h2>
+    <h3>The information contract</h3><ul>{trial.contract.map(item => <li key={item}>{item}</li>)}</ul>
+    <p>This deliberately faulty specimen is pandas-style pseudocode, not an executable Python trial. Diagnose it before opening the repair guide. On narrow screens, swipe within a code box, or focus it and use the left/right arrow keys, to read long lines.</p>
+    <pre className="interview-code-block" tabIndex={0} role="region" aria-label="Faulty backtest specimen"><code>{trial.flawed}</code></pre>
+    <ol>{trial.tasks.map(item => <li key={item}>{item}</li>)}</ol>
+    <InterviewNotes id="debugging:backtest" label="Your leakage diagnosis, repaired pseudocode, cutoff trace, and adversarial tests"/>
+    <button className="button ghost" disabled={revealed} onClick={() => setRevealed(true)}>Reveal the backtest repair guide</button>
+    {revealed && <div role="region" aria-label="Backtest repair guide"><h3>Four distinct repairs</h3><ol>{trial.repairs.map(item => <li key={item}>{item}</li>)}</ol>
+      <p className="interview-equation">{trial.trace}</p>
+      <pre className="interview-code-block" tabIndex={0} role="region" aria-label="Corrected backtest procedure"><code>{trial.corrected}</code></pre>
+      <h3>Tests that could disprove your repair</h3><ul>{trial.probes.map(item => <li key={item}>{item}</li>)}</ul>
+      <p>Self-review each repair: 0 if missed, 1 if found with prompting, 2 if independently justified with a boundary test. This is not an automated grade. Rework a variant with a three-day reporting delay before claiming the distinction is secure.</p>
+    </div>}
+  </section>
+}
+
 function ModulePage({ module }: { module: Module }) {
   const [reviewed, setReviewed, unsaved] = useInterviewValue(`reviewed:${module.slug}`)
   const index = INTERVIEW_MODULES.findIndex(m => m.slug === module.slug)
@@ -69,6 +91,7 @@ function ModulePage({ module }: { module: Module }) {
     <div className="interview-reading">{module.sections.map(section => <section key={section.heading}><h2>{section.heading}</h2><p>{section.body}</p>{section.formula && <pre className="interview-equation">{section.formula}</pre>}</section>)}</div>
     <section className="interview-worked"><p className="section-kicker">Work it before opening the answer</p><h2>A calculation you should be able to defend.</h2><p>{module.worked.prompt}</p><InterviewNotes id={`worked:${module.slug}`} label="Your calculation and assumptions"/><details><summary>Reveal the worked reasoning</summary><ol>{module.worked.steps.map(step => <li key={step}>{step}</li>)}</ol><p><b>{module.worked.answer}</b></p></details></section>
     <section className="interview-pitfalls"><h2>Where good candidates get caught</h2><ul>{module.pitfalls.map(pitfall => <li key={pitfall}>{pitfall}</li>)}</ul></section>
+    {module.slug === 'backtesting' && <BacktestDebugging/>}
     <section aria-label="Concept checks"><h2>Check the distinction, not the vocabulary.</h2>{module.checks.map((item, i) => <Checkpoint key={i} item={item} id={`${module.slug}:${i}`}/>)}</section>
     <section className="interview-defense"><p className="section-kicker">Research-scientist follow-up</p><h2>{module.researchPrompt}</h2><InterviewNotes id={`defense:${module.slug}`} label="Your two-minute oral answer, in notes"/><details><summary>Compare with a strong answer outline</summary><ul>{module.answerOutline.map(p => <li key={p}>{p}</li>)}</ul><p>This is an outline, not the only valid answer. Your assumptions and evidence determine whether a different approach is defensible.</p></details></section>
     <Sources ids={module.sourceIds}/><label className="interview-review-mark"><input type="checkbox" name={`reviewed:${module.slug}`} checked={reviewed === '1'} onChange={e => setReviewed(e.target.checked ? '1' : '')}/>I explained this module aloud without relying on the answer (self-report).</label><SavedWarning unsaved={unsaved}/>

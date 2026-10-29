@@ -29,7 +29,8 @@ Open `#/interview` in the running app. The track is designed for an experienced 
 - **12 deeper modules:** problem framing and censored demand; statistical foundations; temporal structure; classical models; global forecasts; intermittent/hierarchical demand; backtesting; probabilistic forecasting; newsvendor; replenishment; constrained optimization; research/causal design.
 - **Eight core derivation cards:** Bayes, OLS, logistic gradients, regularization, ensembles, PCA, interval uncertainty, and experiments.
 - **Four computed labs:** 1–28-day rolling-origin baselines, empirical newsvendor costs, animated daily inventory accounting, and a forecast-to-policy comparison with validation selection followed by a frozen final evaluation.
-- **Six executable Python/SQL trials:** calendar-safe panel features, multi-horizon rolling origins, forecast metrics, discrete newsvendor, replenishment ledger, and SQLite calendar-window features. Reference solutions, test contracts and hints are available after an independent attempt.
+- **Six executable Python/SQL trials:** calendar-safe panel features, multi-horizon rolling origins, forecast metrics, discrete newsvendor, replenishment ledger, and SQLite calendar-window features. Try independently before opening the available reference solutions, test contracts and hints.
+- **A supplied backtest-debugging specimen:** diagnose four leakage mechanisms under an explicit reporting-delay contract, save a repaired procedure, and compare adversarial tests with a hidden review guide. This is pseudocode review, not an automatically graded seventh coding trial.
 - **Four original timed cases:** demand forecasting, inventory decisions, research-policy evaluation, and small-business cash-flow/craft-demo reasoning. Follow-up twists and dimension-specific rubrics are self-assessment, not automated interview grades.
 
 | Day | Focus |

@@ -82,6 +82,27 @@ try {
   await render('')
   assert.match(getByRole(container, 'region', { name: 'Interview practice record' }).textContent, /1 \/ 24/)
 
+  // The scheduled review exercise must contain an actual specimen, preserve the
+  // learner's diagnosis, and keep the repair guide hidden until requested.
+  const debuggingLink = getByRole(container, 'link', { name: 'Leakage debugging trial', exact: true })
+  assert.equal(debuggingLink.getAttribute('href'), '#/interview/backtesting')
+  await render('backtesting')
+  getByRole(container, 'heading', { name: 'Debug the backtest that looks too good' })
+  const specimen = getByRole(container, 'region', { name: 'Faulty backtest specimen' })
+  assert.equal(specimen.tabIndex, 0, 'Long pseudocode must be keyboard-scrollable')
+  assert.equal(queryByRole(container, 'region', { name: 'Backtest repair guide' }), null)
+  const diagnosisLabel = 'Your leakage diagnosis, repaired pseudocode, cutoff trace, and adversarial tests'
+  const diagnosis = 'At origin28, use data through26; horizon7 training origins end at19.'
+  await change(getByRole(container, 'textbox', { name: diagnosisLabel }), diagnosis)
+  await click(getByRole(container, 'button', { name: 'Reveal the backtest repair guide' }))
+  const repair = getByRole(container, 'region', { name: 'Backtest repair guide' })
+  getByRole(repair, 'heading', { name: 'Tests that could disprove your repair' })
+  assert.equal(getByRole(repair, 'region', { name: 'Corrected backtest procedure' }).tabIndex, 0)
+  assert.ok(getByRole(container, 'button', { name: 'Reveal the backtest repair guide' }).disabled)
+  await render('backtesting')
+  assert.equal(getByRole(container, 'textbox', { name: diagnosisLabel }).value, diagnosis)
+  assert.equal(queryByRole(container, 'region', { name: 'Backtest repair guide' }), null)
+
   await render('labs')
   const runForecast = getByRole(container, 'button', { name: 'Run rolling-origin comparison' })
   assert.ok(runForecast.disabled)

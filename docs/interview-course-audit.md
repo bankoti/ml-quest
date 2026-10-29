@@ -135,3 +135,11 @@ The UI source registry uses stable IDs. Source pages may be consolidated chapter
 - intuit-hiring: [Intuit — Hiring process](https://www.intuit.com/careers/hiring-process/).
 
 Before claiming the integrated refresher is complete, verify content/UI links, all numeric examples, lab–text consistency, accessible controls, Python reference solutions and rejected incorrect solutions, persistence, and the exact study-time totals. This audit records curriculum requirements; it is not an execution report for those integration checks.
+
+## Final focused-curriculum review — October 29, 2026
+
+A second read-only review covered the twelve modules, eight core derivation cards, six executable coding trials, four mock cases, and the lab–text contracts. It found one remaining schedule-to-practice gap: Day 4 assigned leakage debugging without supplying the faulty pipeline. That gap is now closed by the backtesting module's 60-minute pseudocode-review exercise, retaining the same daily time budget.
+
+The exercise supplies a complete calendar and two-day reporting-delay contract, deliberately defective feature construction, label eligibility, preprocessing and recursive-baseline logic, a saved diagnosis, and a hidden repair guide. Its numerical boundary trace and adversarial probes were independently reviewed. In particular, changing future actuals may change scores without changing issued predictions; changing eligible training evidence for a global model may legitimately affect other entities. These distinctions are part of the exercise, not invariants incorrectly imposed by its review guide.
+
+No other blocking content-correctness finding remained in that focused review. Derivations, worked calculations, executable contracts, original timed cases and oral follow-ups support the requested one-week refresher. Advanced ARIMA fitting, reconciliation algorithms and probabilistic-model training remain conceptual rather than independently assessed implementations. Broad research-specialization mastery, a recruiter's exact interview loop and the learner's own unaided performance are not established by this review. Browser and execution evidence is recorded separately in `docs/browser-qa.md`; final release validation and publication are still separate requirements.
