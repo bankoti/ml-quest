@@ -43,6 +43,31 @@ try {
   assert.deepEqual(STUDY_DAYS.map(d => d.day), [1, 2, 3, 4, 5, 6, 7])
   for (const day of STUDY_DAYS) assert.equal(day.blocks.reduce((sum, b) => sum + b.minutes, 0), 360, `Day ${day.day} must fit the actual six-hour budget`)
   const slugs = new Set(INTERVIEW_MODULES.map(m => m.slug))
+  // A learner can open each day, attempt its question, reveal the explanation,
+  // and return to their own saved reasoning without earning core mastery.
+  await render('')
+  for (const day of STUDY_DAYS) {
+    const disclosure = [...container.querySelectorAll('.interview-plan > details')][day.day - 1]
+    if (!disclosure.open) await click(disclosure.querySelector('summary'))
+    const lesson = getByRole(container, 'region', { name: `Day ${day.day} opening lesson` })
+    getByRole(lesson, 'region', { name: `Day ${day.day} worked example` })
+    const answer = lesson.querySelector('details')
+    assert.equal(answer.open, false)
+    await change(getByRole(lesson, 'textbox'), `My reasoning for day ${day.day}`)
+    await click(answer.querySelector('summary'))
+    assert.equal(answer.open, true)
+    await click(answer.querySelector('summary'))
+    assert.equal(answer.open, false)
+    assert.equal(day.blocks.filter(b => b.title === 'Break').reduce((sum, b) => sum + b.minutes, 0), 30)
+  }
+  await render('')
+  for (const day of STUDY_DAYS) {
+    const disclosure = [...container.querySelectorAll('.interview-plan > details')][day.day - 1]
+    if (!disclosure.open) await click(disclosure.querySelector('summary'))
+    const lesson = getByRole(container, 'region', { name: `Day ${day.day} opening lesson` })
+    assert.equal(getByRole(lesson, 'textbox').value, `My reasoning for day ${day.day}`)
+    assert.equal(lesson.querySelector('details').open, false)
+  }
   assert.equal(slugs.size, 12)
   const knownHref = href => {
     if (href.startsWith('#/lesson/')) return LESSONS.some(l => l.slug === href.split('/')[2])
@@ -84,7 +109,9 @@ try {
 
   // The scheduled review exercise must contain an actual specimen, preserve the
   // learner's diagnosis, and keep the repair guide hidden until requested.
-  const debuggingLink = getByRole(container, 'link', { name: 'Leakage debugging trial', exact: true })
+  const dayFour = container.querySelectorAll('.interview-plan > details')[3]
+  if (!dayFour.open) await click(dayFour.querySelector('summary'))
+  const debuggingLink = getByRole(dayFour, 'link', { name: 'Find the hidden shortcuts in a faulty backtest', exact: true })
   assert.equal(debuggingLink.getAttribute('href'), '#/interview/backtesting')
   await render('backtesting')
   getByRole(container, 'heading', { name: 'Debug the backtest that looks too good' })
@@ -200,6 +227,27 @@ try {
   assert.match(getByRole(container, 'textbox', { name: /Your case answer/ }).value, /estimand/)
   await click(getByRole(container, 'button', { name: 'Finish attempt & reveal review guide' }))
   assert.equal(getAllByRole(container, 'combobox', { name: 'Your self-assessment' })[0].value, '1')
+  // Exercise the actual reveal and case-switching boundary, not source-text proxies.
+  for (const item of INTERVIEW_CASES) {
+    await render('mock')
+    await change(getByRole(container, 'combobox', { name: 'Choose an interview case' }), item.slug)
+    assert.equal(queryByRole(container, 'region', { name: 'Detailed worked example' }), null)
+    await change(getByRole(container, 'textbox', { name: /Your case answer/ }), `Independent attempt for ${item.slug}`)
+    await click(getByRole(container, 'button', { name: 'Finish attempt & reveal review guide' }))
+    const worked = getByRole(container, 'region', { name: 'Detailed worked example' })
+    assert.equal(getAllByRole(worked, 'heading', { level: 4, name: 'Why choose this path?' }).length, 6)
+    getByRole(worked, 'heading', { name: 'How I would close the answer' })
+    for (const link of getAllByRole(worked, 'link')) assert.ok(Object.values(INTERVIEW_SOURCES).some(source => source.url === link.getAttribute('href')))
+    const twist = [...container.querySelectorAll('summary')].find(s => s.textContent === 'Reason through the twist')
+    await click(twist)
+    assert.equal(twist.parentElement.open, true)
+    await click(twist)
+    assert.equal(twist.parentElement.open, false)
+    await render('mock')
+    await change(getByRole(container, 'combobox', { name: 'Choose an interview case' }), item.slug)
+    assert.equal(getByRole(container, 'textbox', { name: /Your case answer/ }).value, `Independent attempt for ${item.slug}`)
+    assert.equal(queryByRole(container, 'region', { name: 'Detailed worked example' }), null)
+  }
   await render('not-a-real-module')
   getByRole(container, 'heading', { name: 'That interview section was not found.' })
   assert.equal(localStorage.getItem('ml-quest-progress-v2'), oldCore, 'Interview activity must never award or reset core-course progress')

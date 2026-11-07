@@ -4,6 +4,8 @@ import { INTERVIEW_MODULES, STUDY_DAYS, COURSE_AUDIT } from './interviewContent'
 import { INTERVIEW_CASES, INTERVIEW_PYTHON, INTERVIEW_SOURCES } from './interviewPractice'
 import { CORE_REFRESHER } from './interviewCore'
 import { BACKTEST_DEBUGGING } from './interviewDebugging'
+import { MOCK_WORKED_EXAMPLES } from './mockWorkedExamples'
+import { DAY_LESSONS } from './interviewDayLessons'
 import { ForecastingLabs, InterviewNotes } from './ForecastingLabs'
 import { downloadInterviewNotebook, INTERVIEW_PREFIX, readInterviewValue, useInterviewValue } from './interviewStorage'
 import { runChallenge, type RunResult } from './engine/pyodide'
@@ -55,8 +57,8 @@ function Overview() {
     </header>
     <div className="interview-callout"><h2>Use the map, not the completion counter.</h2><p>You already have ML experience. Use the original 27 visual lessons to repair a specific gap, not as a prerequisite marathon. The new track adds derivations, forecasting and inventory assumptions, original practice cases, and a research defense. It does not claim to be Intuit’s actual question bank or guarantee readiness.</p><p>Intuit describes a typical role-specific craft demonstration and deeper interviews. Your recruiter’s instructions take precedence; the job description and exact interview loop have not been supplied.</p><Sources ids={['intuit-hiring']}/></div>
     <section className="interview-progress" aria-label="Interview practice record"><div><strong>{answered} / {INTERVIEW_MODULES.reduce((s, m) => s + m.checks.length, 0)}</strong><span>currently correct concept checks</span></div><div><strong>{passed} / {INTERVIEW_PYTHON.length}</strong><span>coding trials passed at least once</span></div><p>Separate from core XP and the certificate. Seeing solutions and passing small tests are not proof of independent interview performance.</p><button className="button ghost" onClick={() => setExportError(!downloadInterviewNotebook())}>Download saved answers & notes ↓</button>{exportError && <p role="alert">Storage could not be read. Copy your visible notes instead.</p>}</section>
-    <section className="interview-plan" aria-labelledby="week-heading"><p className="section-kicker">The 6-hour daily rhythm</p><h2 id="week-heading">Understand. Derive. Implement. Defend.</h2><p>Work aloud. Start closed-book, expose a gap, then use the explanation. Each day totals 360 minutes; breaks are included. If you run out of time, cut optional reading—not the trial and correction.</p>
-      {STUDY_DAYS.map(day => <details key={day.day} open={day.day === 1}><summary><span>Day {day.day}</span><b>{day.title}</b><small>{day.blocks.reduce((sum, block) => sum + block.minutes, 0)} min</small></summary><div className="interview-day"><p>{day.goal}</p><ol>{day.blocks.map((block, i) => <li key={i}><span>{block.minutes} min</span><div><a href={block.href}>{block.title}</a><p>{block.instruction}</p></div></li>)}</ol><div className="interview-module-links">{INTERVIEW_MODULES.filter(m => m.day === day.day).map(m => <a href={`#/interview/${m.slug}`} key={m.slug}>{m.title} →</a>)}</div></div></details>)}
+    <section className="interview-plan" aria-labelledby="week-heading"><p className="section-kicker">A teacher-guided week · six hours a day</p><h2 id="week-heading">One idea. A worked example. Your turn.</h2><p>Open one day at a time. Begin with its short lesson: we explain the idea before asking you to use it. Follow the worked example, try the question yourself, then use the timed sessions to go deeper. You do not need to remember every term before starting.</p><p>The opening lesson is included in the first session, not extra homework. Every day still totals 360 minutes, including two 15-minute breaks. The times are budgets, not deadlines for understanding: if you get stuck, finish one small example and record the gap rather than rushing through optional reading.</p>
+      {STUDY_DAYS.map(day => <details key={day.day} open={day.day === 1}><summary><span>Day {day.day}</span><b>{day.title}</b><small>{day.blocks.reduce((sum, block) => sum + block.minutes, 0)} min</small></summary><div className="interview-day"><p>{day.goal}</p><DayTeachingLesson day={day.day}/><h3>Your guided sessions</h3><ol>{day.blocks.map((block, i) => <li key={i}><span>{block.minutes} min</span><div><a href={block.href}>{block.title}</a><p>{block.instruction}</p></div></li>)}</ol><aside className="interview-day-finish"><h3>Before moving on</h3><p>{DAY_LESSONS[day.day].finish}</p></aside><div className="interview-module-links">{INTERVIEW_MODULES.filter(m => m.day === day.day).map(m => <a href={`#/interview/${m.slug}`} key={m.slug}>{m.title} →</a>)}</div></div></details>)}
     </section>
     <section className="interview-audit"><p className="section-kicker">Whole-course review</p><h2>What to reuse. What needed depth.</h2><p>The original course remains an introductory foundation. Here is the priority for this interview week—not a claim that every ML topic is now advanced.</p><div className="interview-audit-grid">{COURSE_AUDIT.map(area => <article key={area.area}><span className={`audit-status ${area.status}`}>{area.status}</span><h3>{area.area}</h3><p>{area.detail}</p>{area.links.map(link => <a key={link} href={link}>{link.startsWith('#/lesson/') ? getLesson(link.split('/')[2])?.title ?? 'Review foundation' : 'Open relevant practice'} →</a>)}</article>)}</div></section>
     <div className="interview-callout"><h2>Your readiness evidence</h2><p>Before interview day, independently solve an unseen variant, explain a derivation without notes, find a leakage bug, and defend an experiment under follow-up questions. A strong mock answer states what is known, what is assumed, what evidence could disprove it, and what action the business should take.</p><a href="#/interview/mock">Run a timed mock and use the self-assessment rubric →</a></div>
@@ -172,7 +174,45 @@ function MockSession({ item }: { item: PracticeCase }) {
   return <section className="interview-mock"><p className="section-kicker">{item.role} · original practice case</p><h2>{item.title}</h2><div className="interview-timer"><output aria-label="Time remaining">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</output><button className="button ghost" disabled={seconds === 0} onClick={() => { if (!running) deadline.current = Date.now() + seconds * 1000; setRunning(v => !v) }}>{running ? 'Pause timer' : 'Start / resume timer'}</button><button className="button ghost" onClick={() => { setRunning(false); setSeconds(item.minutes * 60) }}>Reset timer</button><small>Timer resets on leaving this case. Answers remain saved. Time limits are practice targets, not a claim about Intuit’s format.</small></div>{seconds === 0 && <p role="status">Timebox complete. Finish your spoken recommendation, then assess the reasoning.</p>}
     <p className="interview-lede">{item.brief}</p><ul>{item.facts.map(fact => <li key={fact}>{fact}</li>)}</ul><ol className="interview-case-prompts">{item.prompts.map(prompt => <li key={prompt}>{prompt}</li>)}</ol><InterviewNotes id={`mock:${item.slug}`} label="Your case answer: framing, assumptions, calculation, experiment, and recommendation"/>
     <button className="button primary" disabled={revealed} onClick={() => { setRunning(false); setRevealed(true) }}>Finish attempt & reveal review guide</button>
-    {revealed && <section className="interview-case-review" aria-label="Mock review guide"><h2>Assess evidence, not fluency.</h2><p>This is a self-assessment rubric, not an AI score. Ask a peer to challenge your assumptions. A polished answer that leaks data or cannot support its conclusion should not receive full credit.</p><div className="interview-rubric">{item.rubric.map((criterion, index) => <RubricScore key={index} item={criterion} id={`${item.slug}:${index}`}/>)}</div><details><summary>A defensible answer outline</summary><ol>{item.outline.map(p => <li key={p}>{p}</li>)}</ol></details><h3>Now change the conditions</h3><p>{item.twist.prompt}</p><InterviewNotes id={`twist:${item.slug}`} label="How does your recommendation change?"/><details><summary>Reason through the twist</summary><p>{item.twist.answer}</p></details></section>}
+    {revealed && <section className="interview-case-review" aria-label="Mock review guide">
+      <WorkedMockAnswer slug={item.slug}/>
+      <h2>Assess evidence, not fluency.</h2><p>This is a self-assessment rubric, not an AI score. Ask a peer to challenge your assumptions. A polished answer that leaks data or cannot support its conclusion should not receive full credit.</p><div className="interview-rubric">{item.rubric.map((criterion, index) => <RubricScore key={index} item={criterion} id={`${item.slug}:${index}`}/>)}</div>
+      <details><summary>Quick-recall outline</summary><ol>{item.outline.map(p => <li key={p}>{p}</li>)}</ol></details>
+      <h3>Now change the conditions</h3><p>{item.twist.prompt}</p><InterviewNotes id={`twist:${item.slug}`} label="How does your recommendation change?"/>
+      <details><summary>Reason through the twist</summary>{MOCK_WORKED_EXAMPLES[item.slug].followUp.map(p => <p key={p}>{p}</p>)}</details>
+    </section>}
+  </section>
+}
+
+function DayTeachingLesson({ day }: { day: number }) {
+  const lesson = DAY_LESSONS[day]
+  return <section className="interview-day-lesson" aria-label={`Day ${day} opening lesson`}>
+    <h3>Let’s start with a question</h3><p className="interview-day-opening">{lesson.opening}</p>
+    {lesson.explanation.map(p => <p key={p}>{p}</p>)}
+    <section className="interview-day-example" aria-label={`Day ${day} worked example`}>
+      <h3>Let’s work through it together</h3><p>{lesson.example.question}</p>
+      <ol>{lesson.example.steps.map(step => <li key={step}>{step}</li>)}</ol>
+      <p><strong>The idea to keep: </strong>{lesson.example.takeaway}</p>
+    </section>
+    <h3>Your turn—before looking at the answer</h3><p>{lesson.check.question}</p>
+    <InterviewNotes id={`day:${day}`} label={`Day ${day}: explain your reasoning in your own words`}/>
+    <details><summary>Show the reasoning</summary><p>{lesson.check.answer}</p></details>
+  </section>
+}
+
+function WorkedMockAnswer({ slug }: { slug: string }) {
+  const example = MOCK_WORKED_EXAMPLES[slug]
+  return <section className="interview-worked-answer" aria-label="Detailed worked example">
+    <p className="section-kicker">Worked example · reasoning, not a script to memorize</p>
+    <h2>A complete answer, one decision at a time.</h2>
+    <p>{example.introduction}</p>
+    <p>Read this after your attempt. Pause at each step and explain the choice aloud. Other approaches can be defensible when their assumptions and evidence support them.</p>
+    {example.steps.map(step => <section className="interview-answer-step" key={step.title}>
+      <h3>{step.title}</h3>{step.explanation.map(p => <p key={p}>{p}</p>)}
+      <aside className="interview-answer-why"><h4>Why choose this path?</h4><p>{step.why}</p></aside>
+    </section>)}
+    <aside className="interview-answer-recommendation"><h3>How I would close the answer</h3><p>{example.recommendation}</p></aside>
+    <div className="interview-sources"><h3>Review the underlying concepts</h3><ul>{example.sources.map(id => <li key={id}><a href={INTERVIEW_SOURCES[id].url} target="_blank" rel="noreferrer">{INTERVIEW_SOURCES[id].title} ↗</a></li>)}</ul></div>
   </section>
 }
 
