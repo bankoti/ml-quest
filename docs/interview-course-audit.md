@@ -1,5 +1,21 @@
 # ML Quest interview-refresher audit
 
+## Teacher-guided seven-day plan — 2026-11-06
+
+Teaching standard requested by the learner: explain intuitively and incrementally, do not skip important steps, and avoid unnecessary detail. Use original language, not an imitation or endorsement by any named teacher. Introduce terms through their meaning, show a small calculation, explain why the choice matters, and only then ask for independent practice.
+
+Each of the seven days now includes an opening question, plain-language explanation, three-step numerical/operational example, takeaway, saved learner response, hidden reasoning and a concrete before-moving-on check. Rewrote all non-break session instructions to specify the task and relevant existing exercise. Clarified the different Python/SQL missing-data contracts, the lost-sales ledger's scope, conceptual versus implemented model comparisons, and the difference between the combined day-seven session and individual mock timers. The introductory lessons are inside the existing study blocks: each day remains 360 minutes with 30 minutes of breaks.
+
+Local verification: full `DEPLOY_BASE=/ml-quest/ npm test` passed after updating the renamed debugging-link UI expectation. New behavioral tests open all seven days, reveal/hide explanations, save independent notes, remount and verify day-specific persistence without core mastery changes. Isolated Chrome checks confirmed all seven days fit 320px; desktop and mobile screenshots were inspected. Earlier detailed mock improvements remain included. These updates are not yet published.
+
+## Detailed mock solutions — 2026-11-06
+
+All four mock cases now reveal a six-step worked example after the learner finishes an attempt. Each step explains the reasoning and why that approach was chosen. Walkthroughs include numerical examples, alternatives, assumptions, a closing recommendation, expanded twist reasoning and links to underlying concepts. The earlier outlines remain as collapsible quick-recall summaries; rubrics and saved learner answers are unchanged.
+
+Additional scenario numbers are explicitly synthetic. The inventory walkthrough enumerates all four candidate quantities and distinguishes cycle service, fill rate and review policies. The cash-flow walkthrough distinguishes a payroll-reserve crossing from inability to fund payroll, and explains why expected cash can hide a shortfall scenario. The research case separates predictive improvement from causal policy benefit.
+
+Verification: full `DEPLOY_BASE=/ml-quest/ npm test` passed. Added real-component checks for all four reveal boundaries, rationale sections, reference links, twist disclosure and per-case saved answers. Independent arithmetic checked mismatch costs (224, 116, 124.8, 160), reorder point (239.48), periodic target (402.227), illustrative WAPE and cash-path mean. Isolated Chrome preview verified all four worked examples at 320px with no document overflow; desktop and mobile screenshots were visually inspected. This entry records local verification, not deployment.
+
 Audit date: 2026-10-28. Scope: the complete core course and its learning map, Python quests, computed laboratories, experiment guides, model comparison, dataset playground, reference material, and three capstones. The initial read used 59d917b; implementation continues from its descendant c299052 on the interview branch. Unrelated workspace projects were excluded.
 
 The learner has one week and six hours per day. The stated target is data-scientist/research-scientist interviewing at Intuit, with a particular interest in demand forecasting and inventory optimisation. This document is a curriculum audit, not a claim about confidential company questions, a specific role's interview script, an independently accredited course, or a guaranteed outcome.
